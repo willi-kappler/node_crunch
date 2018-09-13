@@ -1,2 +1,2 @@
-# node_crunch
+# Node Crunch
 Allows to distribute computations across several nodes
