@@ -3,7 +3,7 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
-
+extern crate rmp_serde;
 
 pub mod error;
 pub mod configuration;
