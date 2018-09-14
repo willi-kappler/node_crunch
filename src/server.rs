@@ -7,6 +7,8 @@ use std::io::{Read};
 
 // External crates
 use failure::Error;
+use serde::{Deserialize, Serialize};
+use rmp_serde::{Deserializer, Serializer};
 
 // Internal modules
 use configuration::{Configuration};
@@ -50,19 +52,43 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
         match listener.accept() {
             Ok((mut stream, address)) => {
                 info!("Connection from node: {}", address);
+                let timeout = Some(time::Duration::from_secs(5));
+                match stream.set_read_timeout(timeout) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Could not set read timeout for stream: {:?}", e);
+                    }
+                }
+
+                match stream.set_write_timeout(timeout) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Could not set write timeout for stream: {:?}", e);
+                    }
+                }
+
                 let local_server = main_server.clone();
                 thread_handlers.push(thread::spawn(move || {
+                    let mut buffer: Vec<u8> = Vec::new();
                     loop {
+                        buffer.clear();
                         match local_server.lock() {
                             Ok(mut server) => {
                                 if server.is_job_done() {
                                     return
                                 } else {
-                                    let mut buffer: Vec<u8> = Vec::new();
                                     match stream.read_to_end(&mut buffer) {
                                         Ok(num_of_bytes) => {
                                             debug!("Number of bytes read: {}", num_of_bytes);
                                             // TODO: Deserialize buffer and match on message type
+                                            match handle_message(&mut *server, &buffer) {
+                                                Ok(_) => {
+
+                                                }
+                                                Err(e) => {
+                                                    error!("Error handling message: {:?}", e);
+                                                }
+                                            }
                                         }
                                         Err(e) => {
                                             error!("Could not read from TcpStream: {:?}", e)
@@ -87,6 +113,25 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
     let wait_to_finish = time::Duration::from_secs(10);
 
     thread::sleep(wait_to_finish);
+
+    Ok(())
+}
+
+fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<(), Error>
+    where S: NCServer {
+
+    let mut de = Deserializer::new(buffer.as_slice());
+
+    let message: NodeMessage = Deserialize::deserialize(&mut de)?;
+
+    match message {
+        NodeMessage::ReadyForInput => {
+            server.node_ready_for_input();
+        }
+        NodeMessage::OutputData => {
+            server.node_output_data();
+        }
+    }
 
     Ok(())
 }
