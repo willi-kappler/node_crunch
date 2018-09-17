@@ -21,9 +21,9 @@ pub enum ServerMessage {
 }
 
 pub trait NCServer {
-    fn node_ready_for_input(&mut self);
+    fn prepare_node_input(&mut self);
 
-    fn node_output_data(&mut self);
+    fn process_node_result(&mut self);
 
     fn is_job_done(&mut self) -> bool;
 }
@@ -126,10 +126,10 @@ fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<(), Error>
 
     match message {
         NodeMessage::ReadyForInput => {
-            server.node_ready_for_input();
+            server.prepare_node_input();
         }
         NodeMessage::OutputData => {
-            server.node_output_data();
+            server.process_node_result();
         }
     }
 
