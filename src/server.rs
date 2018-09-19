@@ -3,7 +3,7 @@ use std::net::{TcpListener, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::marker::{Sync, Send};
 use std::{thread, time};
-use std::io::{Read};
+use std::io::{Read, Write};
 
 // External crates
 use failure::Error;
@@ -21,9 +21,9 @@ pub enum ServerMessage {
 }
 
 pub trait NCServer {
-    fn prepare_node_input(&mut self);
+    fn prepare_node_input(&mut self) -> u8;
 
-    fn process_node_result(&mut self);
+    fn process_node_output(&mut self, result: u8);
 
     fn is_job_done(&mut self) -> bool;
 }
@@ -80,24 +80,50 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                                     match stream.read_to_end(&mut buffer) {
                                         Ok(num_of_bytes) => {
                                             debug!("Number of bytes read: {}", num_of_bytes);
-                                            // TODO: Deserialize buffer and match on message type
                                             match handle_message(&mut *server, &buffer) {
-                                                Ok(_) => {
-
+                                                Ok(Some(node_input_date)) => {
+                                                    // Send input data to node, so that it can start processing
+                                                    {
+                                                        let mut encoder = Serializer::new(&mut buffer);
+                                                        match node_input_date.serialize(&mut encoder) {
+                                                            Ok(_) => {
+                                                                // Nothing to do for now...
+                                                            }
+                                                            Err(e) => {
+                                                                error!("Could not encode message for client: {:?}", e);
+                                                                continue
+                                                            }
+                                                        }
+                                                    }
+                                                    match stream.write(buffer.as_slice()) {
+                                                        Ok(n) => {
+                                                            debug!("Number of bytes written: {}", n);
+                                                        }
+                                                        Err(e) => {
+                                                            error!("Could not write to client: {:?}", e);
+                                                            continue
+                                                        }
+                                                    }
+                                                }
+                                                Ok(None) => {
+                                                    // Nothing to do for now...
                                                 }
                                                 Err(e) => {
                                                     error!("Error handling message: {:?}", e);
+                                                    continue
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            error!("Could not read from TcpStream: {:?}", e)
+                                            error!("Could not read from TcpStream: {:?}", e);
+                                            continue
                                         }
                                     }
                                 }
                             }
                             Err(e) => {
                                 error!("Mutex error: {:?}", e);
+                                continue
                             }
                         }
                     }
@@ -105,7 +131,8 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
 
             }
             Err(e) => {
-                warn!("Could not accept node connecton: {:?}", e)
+                error!("Could not accept node connecton: {:?}", e);
+                continue
             }
         }
     }
@@ -117,7 +144,7 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
     Ok(())
 }
 
-fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<(), Error>
+fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<Option<u8>, Error>
     where S: NCServer {
 
     let mut de = Deserializer::new(buffer.as_slice());
@@ -126,12 +153,11 @@ fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<(), Error>
 
     match message {
         NodeMessage::ReadyForInput => {
-            server.prepare_node_input();
+            Ok(Some(server.prepare_node_input()))
         }
-        NodeMessage::OutputData => {
-            server.process_node_result();
+        NodeMessage::OutputData(result) => {
+            server.process_node_output(result);
+            Ok(None)
         }
     }
-
-    Ok(())
 }
