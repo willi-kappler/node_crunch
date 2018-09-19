@@ -3,16 +3,17 @@ use std::net::{TcpListener, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::marker::{Sync, Send};
 use std::{thread, time};
-use std::io::{Read, Write};
+use std::io::{Read};
 
 // External crates
 use failure::Error;
-use serde::{Deserialize, Serialize};
-use rmp_serde::{Deserializer, Serializer};
+use serde::{Deserialize};
+use rmp_serde::{Deserializer};
 
 // Internal modules
 use configuration::{Configuration};
-use client::{NodeMessage};
+use node::{NodeMessage};
+use util::{send_message};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerMessage {
@@ -74,41 +75,16 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                         match local_server.lock() {
                             Ok(mut server) => {
                                 if server.is_job_done() {
-                                    // TODO: check for error result
-                                    {
-                                        let mut encoder = Serializer::new(&mut buffer);
-                                        ServerMessage::JobFinished.serialize(&mut encoder);
-                                    }
-                                    stream.write(buffer.as_slice());
-
+                                    send_message(&mut stream, ServerMessage::JobFinished);
                                     return
                                 } else {
                                     match stream.read_to_end(&mut buffer) {
                                         Ok(num_of_bytes) => {
                                             debug!("Number of bytes read: {}", num_of_bytes);
                                             match handle_message(&mut *server, &buffer) {
-                                                Ok(Some(node_input_date)) => {
+                                                Ok(Some(node_input_data)) => {
                                                     // Send input data to node, so that it can start processing
-                                                    {
-                                                        // TODO: write helper function send_message();
-                                                        let mut encoder = Serializer::new(&mut buffer);
-                                                        match ServerMessage::ProcessData(node_input_date).serialize(&mut encoder) {
-                                                            Ok(_) => {
-                                                                // Nothing to do for now...
-                                                            }
-                                                            Err(e) => {
-                                                                error!("Could not encode message for client: {:?}", e);
-                                                            }
-                                                        }
-                                                    }
-                                                    match stream.write(buffer.as_slice()) {
-                                                        Ok(n) => {
-                                                            debug!("Number of bytes written: {}", n);
-                                                        }
-                                                        Err(e) => {
-                                                            error!("Could not write to client: {:?}", e);
-                                                        }
-                                                    }
+                                                    send_message(&mut stream, ServerMessage::ProcessData(node_input_data));
                                                 }
                                                 Ok(None) => {
                                                     // Nothing to do for now...
