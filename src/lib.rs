@@ -8,7 +8,8 @@ extern crate rmp_serde;
 pub mod error;
 pub mod configuration;
 pub mod server;
-pub mod client;
+pub mod node;
+pub mod util;
 
 
 /*
