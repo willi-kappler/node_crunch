@@ -16,7 +16,7 @@ use client::{NodeMessage};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerMessage {
-    ProcessData,
+    ProcessData(u8),
     JobFinished,
 }
 
@@ -27,7 +27,6 @@ pub trait NCServer {
 
     fn is_job_done(&mut self) -> bool;
 }
-
 
 pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Error>
     where S: 'static + NCServer + Send + Sync {
@@ -75,6 +74,13 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                         match local_server.lock() {
                             Ok(mut server) => {
                                 if server.is_job_done() {
+                                    // TODO: check for error result
+                                    {
+                                        let mut encoder = Serializer::new(&mut buffer);
+                                        ServerMessage::JobFinished.serialize(&mut encoder);
+                                    }
+                                    stream.write(buffer.as_slice());
+
                                     return
                                 } else {
                                     match stream.read_to_end(&mut buffer) {
@@ -84,14 +90,14 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                                                 Ok(Some(node_input_date)) => {
                                                     // Send input data to node, so that it can start processing
                                                     {
+                                                        // TODO: write helper function send_message();
                                                         let mut encoder = Serializer::new(&mut buffer);
-                                                        match node_input_date.serialize(&mut encoder) {
+                                                        match ServerMessage::ProcessData(node_input_date).serialize(&mut encoder) {
                                                             Ok(_) => {
                                                                 // Nothing to do for now...
                                                             }
                                                             Err(e) => {
                                                                 error!("Could not encode message for client: {:?}", e);
-                                                                continue
                                                             }
                                                         }
                                                     }
@@ -101,7 +107,6 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                                                         }
                                                         Err(e) => {
                                                             error!("Could not write to client: {:?}", e);
-                                                            continue
                                                         }
                                                     }
                                                 }
@@ -110,20 +115,17 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                                                 }
                                                 Err(e) => {
                                                     error!("Error handling message: {:?}", e);
-                                                    continue
                                                 }
                                             }
                                         }
                                         Err(e) => {
                                             error!("Could not read from TcpStream: {:?}", e);
-                                            continue
                                         }
                                     }
                                 }
                             }
                             Err(e) => {
                                 error!("Mutex error: {:?}", e);
-                                continue
                             }
                         }
                     }
@@ -132,7 +134,6 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
             }
             Err(e) => {
                 error!("Could not accept node connecton: {:?}", e);
-                continue
             }
         }
     }
