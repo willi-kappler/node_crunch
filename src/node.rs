@@ -1,15 +1,16 @@
 // Std modules
 use std::net::{TcpStream, SocketAddr};
-use std::io::{Read, Write};
+use std::io::{Read};
 
 // External crates
 use failure::Error;
-use serde::{Deserialize, Serialize};
-use rmp_serde::{Deserializer, Serializer};
+use serde::{Deserialize};
+use rmp_serde::{Deserializer};
 
 // Internal modules
 use configuration::{Configuration};
 use server::{ServerMessage};
+use util::{send_message};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NodeMessage {
@@ -29,13 +30,15 @@ pub fn start_node<N>(configuration: Configuration, mut node: N) -> Result<(), Er
     let mut buffer: Vec<u8> = Vec::new();
 
     loop {
-        // TODO: send ReadyForInput to server at beginning of each loop
+        send_message(&mut stream, NodeMessage::ReadyForInput);
+
         match stream.read_to_end(&mut buffer) {
             Ok(num_of_bytes) => {
                 debug!("Number of bytes read: {}", num_of_bytes);
                 match handle_message(&mut node, &buffer) {
                     Ok(Some(result)) => {
                         // TODO: send result back to server
+                        send_message(&mut stream, NodeMessage::OutputData(result));
                     }
                     Ok(None) => {
                         // No more data -> job finished
@@ -59,7 +62,6 @@ fn handle_message<N>(node: &mut N, buffer: &Vec<u8>) -> Result<Option<u8>, Error
     where N: NCNode {
 
     let mut de = Deserializer::new(buffer.as_slice());
-
     let message: ServerMessage = Deserialize::deserialize(&mut de)?;
 
     match message {
