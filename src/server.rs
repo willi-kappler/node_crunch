@@ -1,5 +1,5 @@
 // Std modules
-use std::net::{TcpListener, SocketAddr};
+use std::net::{TcpListener, SocketAddr, Shutdown};
 use std::sync::{Arc, Mutex};
 use std::marker::{Sync, Send};
 use std::{thread, time};
@@ -76,6 +76,15 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                             Ok(mut server) => {
                                 if server.is_job_done() {
                                     send_message(&mut stream, ServerMessage::JobFinished);
+                                    match stream.shutdown(Shutdown::Both) {
+                                        Ok(_) => {
+                                            // Nothing to do for now...
+                                        }
+                                        Err(e) => {
+                                            error!("Error while shutting down TCP stream: {:?}", e);
+                                        }
+                                    }
+
                                     return
                                 } else {
                                     match stream.read_to_end(&mut buffer) {
@@ -118,6 +127,17 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
 
     thread::sleep(wait_to_finish);
 
+    for thread in thread_handlers {
+        match thread.join() {
+            Ok(_) => {
+                // Nothing to do for now
+            }
+            Err(e) => {
+                error!("Could not join thread: {:?}", e);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -125,7 +145,6 @@ fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<Option<u8>, Err
     where S: NCServer {
 
     let mut de = Deserializer::new(buffer.as_slice());
-
     let message: NodeMessage = Deserialize::deserialize(&mut de)?;
 
     match message {
