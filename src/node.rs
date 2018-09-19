@@ -1,5 +1,5 @@
 // Std modules
-use std::net::{TcpStream, SocketAddr};
+use std::net::{TcpStream, SocketAddr, Shutdown};
 use std::io::{Read};
 
 // External crates
@@ -52,6 +52,15 @@ pub fn start_node<N>(configuration: Configuration, mut node: N) -> Result<(), Er
             Err(e) => {
                 error!("Could not read from stream: {:?}", e);
             }
+        }
+    }
+
+    match stream.shutdown(Shutdown::Both) {
+        Ok(_) => {
+            // Nothing to do for now...
+        }
+        Err(e) => {
+            error!("Error while shutting down TCP stream: {:?}", e);
         }
     }
 
