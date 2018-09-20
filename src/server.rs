@@ -7,7 +7,7 @@ use std::io::{Read};
 
 // External crates
 use failure::Error;
-use serde::{Deserialize};
+use serde::{Deserialize, Serialize};
 use rmp_serde::{Deserializer};
 
 // Internal modules
@@ -16,21 +16,23 @@ use node::{NodeMessage};
 use util::{send_message};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum ServerMessage {
-    ProcessData(u8),
+pub enum ServerMessage<T> {
+    ProcessData(T),
     JobFinished,
 }
 
-pub trait NCServer {
-    fn prepare_node_input(&mut self) -> u8;
+pub trait NCServer<T, U> {
+    fn prepare_node_input(&mut self) -> T;
 
-    fn process_node_output(&mut self, result: u8);
+    fn process_node_output(&mut self, result: U);
 
     fn is_job_done(&mut self) -> bool;
 }
 
-pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Error>
-    where S: 'static + NCServer + Send + Sync {
+pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Result<(), Error>
+    where S: 'static + NCServer<T, U> + Send + Sync,
+          T: Serialize,
+          U: Deserialize<'a> {
 
     let socket = SocketAddr::new(configuration.server_address.parse()?, configuration.port);
     let listener = TcpListener::bind(socket)?;
@@ -75,7 +77,7 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
                         match local_server.lock() {
                             Ok(mut server) => {
                                 if server.is_job_done() {
-                                    send_message(&mut stream, ServerMessage::JobFinished);
+                                    send_message(&mut stream, ServerMessage::JobFinished::<T>);
                                     match stream.shutdown(Shutdown::Both) {
                                         Ok(_) => {
                                             // Nothing to do for now...
@@ -141,11 +143,13 @@ pub fn start_server<S>(configuration: Configuration, server: S) -> Result<(), Er
     Ok(())
 }
 
-fn handle_message<S>(server: &mut S, buffer: &Vec<u8>) -> Result<Option<u8>, Error>
-    where S: NCServer {
+fn handle_message<'a, S, T, U>(server: &mut S, buffer: &Vec<u8>) -> Result<Option<T>, Error>
+    where S: NCServer<T, U>,
+          T: Serialize,
+          U: Deserialize<'a> {
 
     let mut de = Deserializer::new(buffer.as_slice());
-    let message: NodeMessage = Deserialize::deserialize(&mut de)?;
+    let message: NodeMessage<U> = Deserialize::deserialize(&mut de)?;
 
     match message {
         NodeMessage::ReadyForInput => {
