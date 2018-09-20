@@ -10,7 +10,7 @@ use rmp_serde::{Deserializer};
 // Internal modules
 use configuration::{Configuration};
 use server::{ServerMessage};
-use util::{send_message};
+use util::{send_message, set_timout};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NodeMessage<U> {
@@ -30,6 +30,7 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
     let socket = SocketAddr::new(configuration.server_address.parse()?, configuration.port);
     let mut stream = TcpStream::connect(socket)?;
     let mut buffer: Vec<u8> = Vec::new();
+    set_timout(&mut stream);
 
     loop {
         send_message(&mut stream, NodeMessage::ReadyForInput::<U>);

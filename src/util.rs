@@ -1,6 +1,7 @@
 // Std modules
 use std::net::{TcpStream};
 use std::io::{Write};
+use std::{time};
 
 // External crates
 use serde::{Serialize};
@@ -25,6 +26,24 @@ pub fn send_message<M>(stream: &mut TcpStream, message: M)
         }
         Err(e) => {
             error!("Could not write to client: {:?}", e);
+        }
+    }
+}
+
+pub fn set_timout(stream: &mut TcpStream) {
+    let timeout = Some(time::Duration::from_secs(5));
+
+    match stream.set_read_timeout(timeout) {
+        Ok(_) => {}
+        Err(e) => {
+            error!("Could not set read timeout for stream: {:?}", e);
+        }
+    }
+
+    match stream.set_write_timeout(timeout) {
+        Ok(_) => {}
+        Err(e) => {
+            error!("Could not set write timeout for stream: {:?}", e);
         }
     }
 }

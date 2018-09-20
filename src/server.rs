@@ -13,7 +13,7 @@ use rmp_serde::{Deserializer};
 // Internal modules
 use configuration::{Configuration};
 use node::{NodeMessage};
-use util::{send_message};
+use util::{send_message, set_timout};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerMessage<T> {
@@ -54,20 +54,7 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
         match listener.accept() {
             Ok((mut stream, address)) => {
                 info!("Connection from node: {}", address);
-                let timeout = Some(time::Duration::from_secs(5));
-                match stream.set_read_timeout(timeout) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("Could not set read timeout for stream: {:?}", e);
-                    }
-                }
-
-                match stream.set_write_timeout(timeout) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("Could not set write timeout for stream: {:?}", e);
-                    }
-                }
+                set_timout(&mut stream);
 
                 let local_server = main_server.clone();
                 thread_handlers.push(thread::spawn(move || {
