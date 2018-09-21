@@ -44,6 +44,8 @@ impl server::NCServer<InputData, OutputData> for TestServer {
                 chunck = rng.gen_range(0, 10);
             }
 
+            debug!("Send chunck {} to node", chunck);
+
             let start = chunck * self.chunck_size;
             let end = start + self.chunck_size;
 
