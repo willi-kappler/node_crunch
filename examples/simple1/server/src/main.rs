@@ -36,6 +36,7 @@ impl server::NCServer<InputData, OutputData> for TestServer {
         let mut rng = thread_rng();
 
         if self.is_job_done() {
+            debug!("Job is done, send empty data to node");
             InputData{ chunck: 0, data: Vec::new() }
         } else {
             let mut chunck: usize = rng.gen_range(0, 10);
@@ -45,6 +46,7 @@ impl server::NCServer<InputData, OutputData> for TestServer {
             }
 
             debug!("Send chunck {} to node", chunck);
+            debug!("Chunck list: {:?}", self.chuncks_processed);
 
             let start = chunck * self.chunck_size;
             let end = start + self.chunck_size;
