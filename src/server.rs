@@ -13,7 +13,7 @@ use rmp_serde::{Deserializer};
 // Internal modules
 use configuration::{Configuration};
 use node::{NodeMessage};
-use util::{send_message, set_timout, shut_down};
+use util::{send_message};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerMessage<T> {
@@ -53,18 +53,21 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
             }
         }
 
+        debug!("Waiting for data from node...");
+
         match listener.accept() {
             Ok((mut stream, address)) => {
                 debug!("Connection from node: {}", address);
-                set_timout(&mut stream, configuration.timeout);
+                // set_timout(&mut stream, configuration.timeout);
 
                 let local_server = main_server.clone();
                 thread_handlers.push(thread::spawn(move || {
                     debug!("New thread started");
-                    let mut buffer: Vec<u8> = Vec::new();
+                    let mut buffer: Vec<u8> = vec![0; 1024];
                     match local_server.lock() {
                         Ok(mut server) => {
-                            match stream.read_to_end(&mut buffer) {
+                            debug!("Reading data from node...");
+                            match stream.read(&mut buffer) {
                                 Ok(num_of_bytes) => {
                                     debug!("Number of bytes read: {}", num_of_bytes);
                                     handle_message(&mut *server, &buffer, &mut stream);
@@ -78,8 +81,8 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
                             error!("Mutex error: {:?}", e);
                         }
                     }
-                    debug!("Shutting down connection, waiting for the next connection...");
-                    shut_down(&mut stream);
+                    debug!("Shutting down connection");
+                    debug!("--------------------");
                 }));
             }
             Err(e) => {

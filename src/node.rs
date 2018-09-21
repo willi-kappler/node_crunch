@@ -10,7 +10,7 @@ use rmp_serde::{Deserializer};
 // Internal modules
 use configuration::{Configuration};
 use server::{ServerMessage};
-use util::{send_message, set_timout, shut_down};
+use util::{send_message};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NodeMessage<U> {
@@ -27,17 +27,17 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
           T: Deserialize<'a>,
           U: Serialize {
 
-    let mut buffer: Vec<u8> = Vec::new();
+    let mut buffer: Vec<u8> = vec![0; 1024];
     let mut data_processed: Option<U> = None;
 
     debug!("Enter node loop");
 
     loop {
-        buffer.clear();
         let mut stream = connect_to_server(&configuration)?;
 
         match &data_processed {
             None => {
+                debug!("Send ready for input to server");
                 send_message(&mut stream, NodeMessage::ReadyForInput::<U>);
             }
             Some(result) => {
@@ -48,7 +48,9 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
 
         data_processed = None;
 
-        match stream.read_to_end(&mut buffer) {
+        debug!("Waiting for data from server...");
+
+        match stream.read(&mut buffer) {
             Ok(num_of_bytes) => {
                 debug!("Number of bytes read: {}", num_of_bytes);
                 match handle_message(&mut node, &buffer) {
@@ -58,7 +60,6 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
                     }
                     Ok(None) => {
                         debug!("No more data to process, job done!");
-                        shut_down(&mut stream);
                         break;
                     }
                     Err(e) => {
@@ -71,7 +72,9 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
             }
         }
 
-        shut_down(&mut stream);
+        debug!("Shut down connection");
+        debug!("--------------------");
+        // shut_down(&mut stream);
     }
 
     Ok(())
@@ -81,8 +84,8 @@ fn connect_to_server(configuration: &Configuration) -> Result<TcpStream, Error> 
     debug!("Connect to server");
     let socket = SocketAddr::new(configuration.server_address.parse()?, configuration.port);
     // TODO: retry multiple times...
-    let mut stream = TcpStream::connect(socket)?;
-    set_timout(&mut stream, configuration.timeout);
+    let stream = TcpStream::connect(socket)?;
+    // set_timout(&mut stream, configuration.timeout);
     Ok(stream)
 }
 
