@@ -30,8 +30,8 @@ pub fn send_message<M>(stream: &mut TcpStream, message: M)
     }
 }
 
-pub fn set_timout(stream: &mut TcpStream) {
-    let timeout = Some(time::Duration::from_secs(5));
+pub fn set_timout(stream: &mut TcpStream, timeout: u64) {
+    let timeout = Some(time::Duration::from_secs(timeout));
 
     match stream.set_read_timeout(timeout) {
         Ok(_) => {}

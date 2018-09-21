@@ -30,7 +30,7 @@ pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Res
     let socket = SocketAddr::new(configuration.server_address.parse()?, configuration.port);
     let mut stream = TcpStream::connect(socket)?;
     let mut buffer: Vec<u8> = Vec::new();
-    set_timout(&mut stream);
+    set_timout(&mut stream, configuration.timeout);
 
     loop {
         send_message(&mut stream, NodeMessage::ReadyForInput::<U>);

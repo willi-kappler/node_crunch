@@ -54,7 +54,7 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
         match listener.accept() {
             Ok((mut stream, address)) => {
                 info!("Connection from node: {}", address);
-                set_timout(&mut stream);
+                set_timout(&mut stream, configuration.timeout);
 
                 let local_server = main_server.clone();
                 thread_handlers.push(thread::spawn(move || {
