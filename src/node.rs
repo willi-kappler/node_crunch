@@ -19,7 +19,7 @@ pub enum NodeMessage<U> {
 }
 
 pub trait NCNode<T, U> {
-    fn process_new_data_from_server(&mut self, T) -> U;
+    fn process_new_data_from_server(&mut self, input: T) -> U;
 }
 
 pub fn start_node<'a, N, T, U>(configuration: Configuration, mut node: N) -> Result<(), Error>
