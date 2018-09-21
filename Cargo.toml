@@ -2,6 +2,9 @@
 name = "node_crunsh"
 version = "0.1.0"
 authors = ["Willi Kappler <willi.kappler.gm@gmail.com"]
+description = "A crate for distributed computing"
+keywords = ["distribute", "network", "numeric", "computing", "cluster"]
+categories = ["Network programming", "Science"]
 
 [dependencies]
 serde = "1.0"
