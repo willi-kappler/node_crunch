@@ -1,5 +1,5 @@
 // Std modules
-use std::net::{TcpStream};
+use std::net::{TcpStream, Shutdown};
 use std::io::{Write};
 use std::{time};
 
@@ -13,10 +13,11 @@ pub fn send_message<M>(stream: &mut TcpStream, message: M)
 
     match message.serialize(&mut Serializer::new(&mut buffer)) {
         Ok(_) => {
-            // Nothing to do for now...
+            debug!("Serialize was successfull")
         }
         Err(e) => {
-            error!("Could not encode message for client: {:?}", e);
+            error!("Could not encode message: {:?}", e);
+            buffer.clear();
         }
     }
 
@@ -25,7 +26,7 @@ pub fn send_message<M>(stream: &mut TcpStream, message: M)
             debug!("Number of bytes written: {}", n);
         }
         Err(e) => {
-            error!("Could not write to client: {:?}", e);
+            error!("Could not write to stream: {:?}", e);
         }
     }
 }
@@ -34,16 +35,31 @@ pub fn set_timout(stream: &mut TcpStream, timeout: u64) {
     let timeout = Some(time::Duration::from_secs(timeout));
 
     match stream.set_read_timeout(timeout) {
-        Ok(_) => {}
+        Ok(_) => {
+            debug!("Set timout successfull");
+        }
         Err(e) => {
             error!("Could not set read timeout for stream: {:?}", e);
         }
     }
 
     match stream.set_write_timeout(timeout) {
-        Ok(_) => {}
+        Ok(_) => {
+            debug!("Set timout successfull");
+        }
         Err(e) => {
             error!("Could not set write timeout for stream: {:?}", e);
+        }
+    }
+}
+
+pub fn shut_down(stream: &mut TcpStream) {
+    match stream.shutdown(Shutdown::Both) {
+        Ok(_) => {
+            debug!("TCP stream shut down successfull");
+        }
+        Err(e) => {
+            error!("Error while shutting down TCP stream: {:?}", e);
         }
     }
 }

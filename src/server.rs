@@ -1,5 +1,5 @@
 // Std modules
-use std::net::{TcpListener, SocketAddr, Shutdown};
+use std::net::{TcpListener, SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::marker::{Sync, Send};
 use std::{thread, time};
@@ -13,12 +13,12 @@ use rmp_serde::{Deserializer};
 // Internal modules
 use configuration::{Configuration};
 use node::{NodeMessage};
-use util::{send_message, set_timout};
+use util::{send_message, set_timout, shut_down};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerMessage<T> {
-    ProcessData(T),
     JobFinished,
+    ProcessData(T),
 }
 
 pub trait NCServer<T, U> {
@@ -40,9 +40,11 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
     let mut thread_handlers = Vec::new();
 
     loop {
+        debug!("Start loop, waiting for nodes to connect...");
         match main_server.lock() {
             Ok(mut server) => {
                 if server.is_job_done() {
+                    debug!("Job is done!");
                     break
                 }
             }
@@ -53,58 +55,32 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
 
         match listener.accept() {
             Ok((mut stream, address)) => {
-                info!("Connection from node: {}", address);
+                debug!("Connection from node: {}", address);
                 set_timout(&mut stream, configuration.timeout);
 
                 let local_server = main_server.clone();
                 thread_handlers.push(thread::spawn(move || {
+                    debug!("New thread started");
                     let mut buffer: Vec<u8> = Vec::new();
-                    loop {
-                        buffer.clear();
-                        match local_server.lock() {
-                            Ok(mut server) => {
-                                if server.is_job_done() {
-                                    send_message(&mut stream, ServerMessage::JobFinished::<T>);
-                                    match stream.shutdown(Shutdown::Both) {
-                                        Ok(_) => {
-                                            // Nothing to do for now...
-                                        }
-                                        Err(e) => {
-                                            error!("Error while shutting down TCP stream: {:?}", e);
-                                        }
-                                    }
-
-                                    return
-                                } else {
-                                    match stream.read_to_end(&mut buffer) {
-                                        Ok(num_of_bytes) => {
-                                            debug!("Number of bytes read: {}", num_of_bytes);
-                                            match handle_message(&mut *server, &buffer) {
-                                                Ok(Some(node_input_data)) => {
-                                                    // Send input data to node, so that it can start processing
-                                                    send_message(&mut stream, ServerMessage::ProcessData(node_input_data));
-                                                }
-                                                Ok(None) => {
-                                                    // Nothing to do for now...
-                                                }
-                                                Err(e) => {
-                                                    error!("Error handling message: {:?}", e);
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!("Could not read from TcpStream: {:?}", e);
-                                        }
-                                    }
+                    match local_server.lock() {
+                        Ok(mut server) => {
+                            match stream.read_to_end(&mut buffer) {
+                                Ok(num_of_bytes) => {
+                                    debug!("Number of bytes read: {}", num_of_bytes);
+                                    handle_message(&mut *server, &buffer, &mut stream);
+                                }
+                                Err(e) => {
+                                    error!("Could not read from TcpStream: {:?}", e);
                                 }
                             }
-                            Err(e) => {
-                                error!("Mutex error: {:?}", e);
-                            }
+                        }
+                        Err(e) => {
+                            error!("Mutex error: {:?}", e);
                         }
                     }
+                    debug!("Shutting down connection, waiting for the next connection...");
+                    shut_down(&mut stream);
                 }));
-
             }
             Err(e) => {
                 error!("Could not accept node connecton: {:?}", e);
@@ -112,14 +88,14 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
         }
     }
 
-    let wait_to_finish = time::Duration::from_secs(10);
+    let wait_to_finish = time::Duration::from_secs(5);
 
     thread::sleep(wait_to_finish);
 
     for thread in thread_handlers {
         match thread.join() {
             Ok(_) => {
-                // Nothing to do for now
+                debug!("Thread joined successfully");
             }
             Err(e) => {
                 error!("Could not join thread: {:?}", e);
@@ -130,21 +106,37 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
     Ok(())
 }
 
-fn handle_message<'a, S, T, U>(server: &mut S, buffer: &Vec<u8>) -> Result<Option<T>, Error>
+fn handle_message<'a, S, T, U>(server: &mut S, buffer: &Vec<u8>, stream: &mut TcpStream)
     where S: NCServer<T, U>,
           T: Serialize,
           U: Deserialize<'a> {
 
     let mut de = Deserializer::new(buffer.as_slice());
-    let message: NodeMessage<U> = Deserialize::deserialize(&mut de)?;
+    let data: Result<NodeMessage<U>, _> = Deserialize::deserialize(&mut de);
 
-    match message {
-        NodeMessage::ReadyForInput => {
-            Ok(Some(server.prepare_node_input()))
+    match data {
+        Ok(message) => {
+            match message {
+                NodeMessage::ReadyForInput => {
+                    debug!("Node is ready for more input.");
+                }
+                NodeMessage::OutputData(result) => {
+                    debug!("Node has delivered some results.");
+                    server.process_node_output(result);
+                }
+            }
+
+            if server.is_job_done() {
+                debug!("Job is done, no more data to process");
+                send_message(stream, ServerMessage::JobFinished::<T>);
+            } else {
+                debug!("Send some data to node");
+                let node_input_data = server.prepare_node_input();
+                send_message(stream, ServerMessage::ProcessData(node_input_data));
+            }
         }
-        NodeMessage::OutputData(result) => {
-            server.process_node_output(result);
-            Ok(None)
+        Err(e) => {
+            error!("Could not deserialize message: {:?}", e);
         }
     }
 }
