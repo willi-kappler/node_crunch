@@ -1,0 +1,15 @@
+[package]
+name = "simple1"
+version = "0.1.0"
+authors = ["Willi Kappler <willi.kappler.gm@gmail.com"]
+
+[dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+log = "0.4"
+log4rs = "0.8"
+
+node_crunch = {path = "../../../../node_crunch"}
+
+[profile.release]
+lto = true
