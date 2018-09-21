@@ -3,8 +3,15 @@ extern crate log4rs;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate node_crunch;
+extern crate rand;
 
-// Internal crates
+// Std modules
+use std::{thread, time};
+
+// External crates
+use rand::{thread_rng, Rng};
+
+// Internal modules
 use node_crunch::{node, configuration};
 
 #[derive(Debug, Deserialize)]
@@ -25,11 +32,22 @@ struct TestNode {
 
 impl node::NCNode<InputData, OutputData> for TestNode {
     fn process_new_data_from_server(&mut self, input: InputData) -> OutputData {
+        debug!("Processing chunck: {}", input.chunck);
+
         let mut result = OutputData { chunck: input.chunck, data: Vec::new() };
 
         for value in input.data {
             result.data.push(value + 100);
         }
+
+        let mut rng = thread_rng();
+        let sleep_time = rng.gen_range(10, 20);
+
+        debug!("Node sleep time: {}", sleep_time);
+
+        let duration = time::Duration::from_secs(sleep_time);
+
+        thread::sleep(duration);
 
         result
     }
