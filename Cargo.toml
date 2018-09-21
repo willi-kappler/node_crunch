@@ -1,5 +1,5 @@
 [package]
-name = "node_crunsh"
+name = "node_crunch"
 version = "0.1.0"
 authors = ["Willi Kappler <willi.kappler.gm@gmail.com"]
 description = "A crate for distributed computing"
