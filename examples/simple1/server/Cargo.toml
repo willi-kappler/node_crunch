@@ -1,7 +1,7 @@
 [package]
 name = "simple1"
 version = "0.1.0"
-authors = ["Willi Kappler <willi.kappler.gm@gmail.com"]
+authors = ["Willi Kappler <grandor@gmx.de"]
 
 [dependencies]
 serde = "1.0"
