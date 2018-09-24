@@ -25,7 +25,7 @@ struct OutputData {
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "simple1")]
-struct NCOpt {
+pub struct Simple1Opt {
     #[structopt(short = "s", long = "server")]
     server: bool,
 
@@ -50,14 +50,13 @@ fn create_logger(filename: &str) {
 }
 
 fn main() {
-    let options = NCOpt::from_args();
+    let options = Simple1Opt::from_args();
 
     if options.server {
         create_logger("nc_server.log");
-        server::run_server(options.port);
+        server::run_server(options);
     } else {
         create_logger("nc_node.log");
-        node::run_node(&options.ip, options.port)
+        node::run_node(options)
     }
-
 }

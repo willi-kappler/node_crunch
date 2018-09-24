@@ -8,14 +8,15 @@ use rand::{thread_rng, Rng};
 
 // Internal modules
 use node_crunch::{node, configuration};
+
 use InputData;
 use OutputData;
+use Simple1Opt;
 
-pub fn run_node(ip: &str, port: u16) {
+pub fn run_node(options: Simple1Opt) {
     let node_config = configuration::ConfigurationBuilder::default()
-        .server_address(ip)
-        .port(port)
-        .timeout(10u64)
+        .server_address(options.ip)
+        .port(options.port)
         .build()
         .unwrap();
 
@@ -46,7 +47,7 @@ impl node::NCNode<InputData, OutputData> for TestNode {
         }
 
         let mut rng = thread_rng();
-        let sleep_time = rng.gen_range(10, 20);
+        let sleep_time = rng.gen_range(1, 20);
 
         debug!("Node sleep time: {}", sleep_time);
 

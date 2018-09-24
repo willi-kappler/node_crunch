@@ -4,8 +4,10 @@ use rand::{thread_rng, Rng};
 
 // Internal modules
 use node_crunch::{server, configuration};
+
 use InputData;
 use OutputData;
+use Simple1Opt;
 
 #[derive(Debug)]
 struct TestServer {
@@ -15,11 +17,10 @@ struct TestServer {
     chunck_size: usize,
 }
 
-pub fn run_server(port: u16) {
+pub fn run_server(options: Simple1Opt) {
     let server_config = configuration::ConfigurationBuilder::default()
         .server_address("0.0.0.0")
-        .port(port)
-        .timeout(10u64)
+        .port(options.port)
         .build()
         .unwrap();
 
