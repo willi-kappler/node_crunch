@@ -53,10 +53,10 @@ fn main() {
     let options = NCOpt::from_args();
 
     if options.server {
-        create_logger("nc_server");
+        create_logger("nc_server.log");
         server::run_server(options.port);
     } else {
-        create_logger("nc_node");
+        create_logger("nc_node.log");
         node::run_node(&options.ip, options.port)
     }
 
