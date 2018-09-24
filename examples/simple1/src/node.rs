@@ -1,7 +1,20 @@
-pub fn run_node() {
+// Std modules
+use std::{thread, time};
+
+
+// External crates
+use rand::{thread_rng, Rng};
+
+
+// Internal modules
+use node_crunch::{node, configuration};
+use InputData;
+use OutputData;
+
+pub fn run_node(ip: &str, port: u16) {
     let node_config = configuration::ConfigurationBuilder::default()
-        .server_address("127.0.0.1")
-        .port(2020u16)
+        .server_address(ip)
+        .port(port)
         .timeout(10u64)
         .build()
         .unwrap();
