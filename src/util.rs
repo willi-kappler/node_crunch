@@ -5,28 +5,25 @@ use std::{time};
 
 // External crates
 use serde::{Serialize};
-use rmp_serde::{Serializer};
+use bincode::{serialize};
 
 pub fn send_message<M>(stream: &mut TcpStream, message: M)
     where M: Serialize {
-    let mut buffer: Vec<u8> = Vec::new();
 
-    match message.serialize(&mut Serializer::new(&mut buffer)) {
-        Ok(_) => {
-            debug!("Serialize was successfull")
+    match serialize(&message) {
+        Ok(buffer) => {
+            debug!("Serialize was successfull");
+            match stream.write(buffer.as_slice()) {
+                Ok(n) => {
+                    debug!("Number of bytes written: {}", n);
+                }
+                Err(e) => {
+                    error!("Could not write to stream: {:?}", e);
+                }
+            }
         }
         Err(e) => {
             error!("Could not encode message: {:?}", e);
-            buffer.clear();
-        }
-    }
-
-    match stream.write(buffer.as_slice()) {
-        Ok(n) => {
-            debug!("Number of bytes written: {}", n);
-        }
-        Err(e) => {
-            error!("Could not write to stream: {:?}", e);
         }
     }
 }

@@ -9,9 +9,7 @@ categories = ["Network programming", "Science"]
 [dependencies]
 serde = "1.0"
 serde_derive = "1.0"
-#rmp = "0.8"
-rmp-serde = "0.13"
+bincode = "1.0"
 log = "0.4"
-# log4rs = "0.8"
 derive_builder = "0.6"
 failure = "0.1"

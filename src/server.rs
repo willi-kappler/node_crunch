@@ -7,8 +7,8 @@ use std::io::{Read};
 
 // External crates
 use failure::Error;
-use serde::{Deserialize, Serialize};
-use rmp_serde::{Deserializer};
+use serde::{Serialize, de::DeserializeOwned};
+use bincode::{deserialize};
 
 // Internal modules
 use configuration::{Configuration};
@@ -29,10 +29,10 @@ pub trait NCServer<T, U> {
     fn is_job_done(&mut self) -> bool;
 }
 
-pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Result<(), Error>
+pub fn start_server<S, T, U>(configuration: Configuration, server: S) -> Result<(), Error>
     where S: 'static + NCServer<T, U> + Send + Sync,
           T: Serialize,
-          U: Deserialize<'a> {
+          U: DeserializeOwned {
 
     let socket = SocketAddr::new(configuration.server_address.parse()?, configuration.port);
     let listener = TcpListener::bind(socket)?;
@@ -109,13 +109,12 @@ pub fn start_server<'a, S, T, U>(configuration: Configuration, server: S) -> Res
     Ok(())
 }
 
-fn handle_message<'a, S, T, U>(server: &mut S, buffer: &Vec<u8>, stream: &mut TcpStream)
+fn handle_message<S, T, U>(server: &mut S, buffer: &Vec<u8>, stream: &mut TcpStream)
     where S: NCServer<T, U>,
           T: Serialize,
-          U: Deserialize<'a> {
+          U: DeserializeOwned {
 
-    let mut de = Deserializer::new(buffer.as_slice());
-    let data: Result<NodeMessage<U>, _> = Deserialize::deserialize(&mut de);
+    let data = deserialize(buffer);
 
     match data {
         Ok(message) => {
