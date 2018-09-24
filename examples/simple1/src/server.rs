@@ -1,7 +1,24 @@
-pub fn run_server() {
+
+// External crates
+use rand::{thread_rng, Rng};
+
+// Internal modules
+use node_crunch::{server, configuration};
+use InputData;
+use OutputData;
+
+#[derive(Debug)]
+struct TestServer {
+    data: Vec<u8>,
+    chuncks_processed: Vec<bool>,
+    num_of_chuncks: usize,
+    chunck_size: usize,
+}
+
+pub fn run_server(port: u16) {
     let server_config = configuration::ConfigurationBuilder::default()
         .server_address("0.0.0.0")
-        .port(2020u16)
+        .port(port)
         .timeout(10u64)
         .build()
         .unwrap();
