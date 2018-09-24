@@ -41,7 +41,7 @@ impl node::NCNode<InputData, OutputData> for TestNode {
         }
 
         let mut rng = thread_rng();
-        let sleep_time = rng.gen_range(10, 20);
+        let sleep_time = rng.gen_range(2, 5);
 
         debug!("Node sleep time: {}", sleep_time);
 
