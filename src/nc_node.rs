@@ -10,5 +10,5 @@ pub enum NodeMessage {
 }
 
 pub trait NC_Node {
-    fn process_data_from_server(&mut self, Vec<u8>) -> Vec<u8>;
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Vec<u8>;
 }

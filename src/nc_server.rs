@@ -12,10 +12,10 @@ pub enum ServerMessage {
 pub trait NC_Server {
     fn finished(&self) -> bool;
     fn prepare_data_for_node(&mut self) -> Vec<u8>;
-    fn process_data_from_node(&mut self, Vec<u8);
+    fn process_data_from_node(&mut self, data: Vec<u8>);
 }
 
-async fn<T: NC_Server> start_server(server: T) -> Result<(), ()> {
+async fn start_server<T: NC_Server>(server: T) -> Result<(), ()> {
 
     let addr = "127.0.0.1:9000".to_string();
     let mut socket = TcpListener::bind(&addr).await.unwrap();
