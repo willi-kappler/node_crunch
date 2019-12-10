@@ -1,4 +1,5 @@
 use std::{error, fmt, io};
+use bincode;
 
 #[derive(Debug)]
 pub enum NCError {
@@ -10,6 +11,8 @@ pub enum NCError {
     ServerLock,
     WriteU64(io::Error),
     WriteBuffer(io::Error),
+    Serialize(bincode::Error),
+    Deserialize(bincode::Error),
 }
 
 impl fmt::Display for NCError {
@@ -23,6 +26,8 @@ impl fmt::Display for NCError {
             NCError::ServerLock => write!(f, "ServerLock error"),
             NCError::WriteU64(e) => write!(f, "WriteU64 error: {}", e),
             NCError::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
+            NCError::Serialize(e) => write!(f, "Serialize error: {}", e),
+            NCError::Deserialize(e) => write!(f, "Deserialize error: {}", e),
         }        
     }
 }
@@ -38,6 +43,8 @@ impl error::Error for NCError {
             NCError::ServerLock => None,
             NCError::WriteU64(e) => Some(e),
             NCError::WriteBuffer(e) => Some(e),
+            NCError::Serialize(e) => Some(e),
+            NCError::Deserialize(e) => Some(e),
         }
     }
 }
