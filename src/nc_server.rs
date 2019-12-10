@@ -11,6 +11,7 @@ use bincode::{deserialize, serialize};
 use crate::error::{NCError};
 use crate::nc_node::{NodeMessage};
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     ServerHasData(Vec<u8>),
@@ -19,11 +20,11 @@ pub enum ServerMessage {
 
 pub trait NC_Server {
     fn finished(&self) -> bool;
-    fn prepare_data_for_node(&mut self) -> Vec<u8>;
-    fn process_data_from_node(&mut self, data: &Vec<u8>);
+    fn prepare_data_for_node(&mut self) -> Vec<u8>; // TODO: this may fail
+    fn process_data_from_node(&mut self, data: &Vec<u8>); // TODO: this may fail
 }
 
-async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NCError> {
+pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NCError> {
     let addr = "0.0.0.0:9000".to_string(); // TODO: read from config file
     let mut socket = TcpListener::bind(&addr).await.map_err(|e| NCError::TcpBind(e))?;
 
@@ -59,7 +60,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     let mut buffer = vec![0; message_length as usize];
     let num_of_bytes_read: usize = buf_reader.read(&mut buffer[..]).await.map_err(|e| NCError::ReadBuffer(e))?;
 
-    debug!("handle_node: Message length: {}, number of bytes read: {}", message_length, num_of_bytes_read);
+    debug!("handle_node: message length: {}, number of bytes read: {}", message_length, num_of_bytes_read);
 
     match decode(buffer)? {
         NodeMessage::NodeNeedsData => {
