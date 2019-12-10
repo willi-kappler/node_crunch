@@ -46,8 +46,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NCError> {
                 let processed_data = nc_node.process_data_from_server(data); // TODO: this may take a lot of time
                 let message = encode(NodeMessage::NodeHasData(processed_data))?;
 
-                buf_writer.write_u64(message.len() as u64).await.map_err(|e| NCError::WriteU64(e))?;
-                buf_writer.write(&message).await.map_err(|e| NCError::WriteBuffer(e))?;
+                send_message(&mut buf_writer, message).await?;
             }
         }
     }
