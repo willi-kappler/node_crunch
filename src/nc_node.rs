@@ -3,7 +3,7 @@ use tokio::io::{BufReader, BufWriter, AsyncBufReadExt, AsyncWriteExt};
 
 use log::{info, error, debug};
 
-
+#[derive(Debug, Clone)]
 pub enum NodeMessage {
     NodeNeedsData,
     NodeHasData(Vec<u8>),
