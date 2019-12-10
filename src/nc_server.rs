@@ -10,7 +10,7 @@ use bincode::{deserialize, serialize};
 
 use crate::error::{NCError};
 use crate::nc_node::{NodeMessage};
-
+use crate::util::{send_message, receive_message};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
@@ -68,8 +68,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
             if quit {
                 let message = encode(ServerMessage::ServerFinished)?;
 
-                buf_writer.write_u64(message.len() as u64).await.map_err(|e| NCError::WriteU64(e))?;
-                buf_writer.write(&message).await.map_err(|e| NCError::WriteBuffer(e))?;
+                send_message(&mut buf_writer, message).await?;
 
                 debug!("No more data for node, server has finished");
             } else {
@@ -80,9 +79,8 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
 
                 let message: Vec<u8> = encode(ServerMessage::ServerHasData(new_data))?;
                 let message_length = message.len() as u64;
-    
-                buf_writer.write_u64(message_length).await.map_err(|e| NCError::WriteU64(e))?;
-                buf_writer.write(&message).await.map_err(|e| NCError::WriteBuffer(e))?;
+
+                send_message(&mut buf_writer, message).await?;
     
                 debug!("New data sent to node, message_length: {}", message_length);
             }
@@ -104,8 +102,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
 
                 let message: Vec<u8> = encode(ServerMessage::ServerFinished)?;
 
-                buf_writer.write_u64(message.len() as u64).await.map_err(|e| NCError::WriteU64(e))?;
-                buf_writer.write(&message).await.map_err(|e| NCError::WriteBuffer(e))?;
+                send_message(&mut buf_writer, message).await?;
 
                 debug!("Job is finished!");
             }

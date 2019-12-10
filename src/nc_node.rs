@@ -8,6 +8,7 @@ use bincode::{deserialize, serialize};
 
 use crate::error::{NCError};
 use crate::nc_server::{ServerMessage};
+use crate::util::{send_message, receive_message};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeMessage {
@@ -33,8 +34,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NCError> {
 
         let message = encode(NodeMessage::NodeNeedsData)?;
 
-        buf_writer.write_u64(message.len() as u64).await.map_err(|e| NCError::WriteU64(e))?;
-        buf_writer.write(&message).await.map_err(|e| NCError::WriteBuffer(e))?;
+        send_message(&mut buf_writer, message).await?;
 
         let message_length: u64 = buf_reader.read_u64().await.map_err(|e| NCError::ReadU64(e))?;
         let mut buffer = vec![0; message_length as usize];
