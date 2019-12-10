@@ -36,11 +36,9 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NCError> {
 
         send_message(&mut buf_writer, message).await?;
 
-        let message_length: u64 = buf_reader.read_u64().await.map_err(|e| NCError::ReadU64(e))?;
-        let mut buffer = vec![0; message_length as usize];
-        let num_of_bytes_read: usize = buf_reader.read(&mut buffer[..]).await.map_err(|e| NCError::ReadBuffer(e))?;
+        let (num_of_bytes_read, buffer) = receive_message(&mut buf_reader).await?;
 
-        debug!("start_node: message length: {}, number of bytes read: {}", message_length, num_of_bytes_read);
+        debug!("start_node: number of bytes read: {}", num_of_bytes_read);
 
         match decode(buffer)? {
             ServerMessage::ServerFinished => quit = true,

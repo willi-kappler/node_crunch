@@ -56,11 +56,9 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
     
-    let message_length: u64 = buf_reader.read_u64().await.map_err(|e| NCError::ReadU64(e))?;
-    let mut buffer = vec![0; message_length as usize];
-    let num_of_bytes_read: usize = buf_reader.read(&mut buffer[..]).await.map_err(|e| NCError::ReadBuffer(e))?;
+    let (num_of_bytes_read, buffer) = receive_message(&mut buf_reader).await?;
 
-    debug!("handle_node: message length: {}, number of bytes read: {}", message_length, num_of_bytes_read);
+    debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
 
     match decode(buffer)? {
         NodeMessage::NodeNeedsData => {
