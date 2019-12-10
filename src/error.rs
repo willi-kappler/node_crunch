@@ -8,6 +8,8 @@ pub enum NCError {
     ReadBuffer(io::Error),
     QuitLock,
     ServerLock,
+    WriteU64(io::Error),
+    WriteBuffer(io::Error),
 }
 
 impl fmt::Display for NCError {
@@ -19,6 +21,8 @@ impl fmt::Display for NCError {
             NCError::ReadBuffer(e) => write!(f, "ReadBuffer error: {}", e),
             NCError::QuitLock => write!(f, "QuitLock error"),
             NCError::ServerLock => write!(f, "ServerLock error"),
+            NCError::WriteU64(e) => write!(f, "WriteU64 error: {}", e),
+            NCError::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
         }        
     }
 }
@@ -32,6 +36,8 @@ impl error::Error for NCError {
             NCError::ReadBuffer(e) => Some(e),
             NCError::QuitLock => None,
             NCError::ServerLock => None,
+            NCError::WriteU64(e) => Some(e),
+            NCError::WriteBuffer(e) => Some(e),
         }
     }
 }
