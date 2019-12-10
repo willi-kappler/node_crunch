@@ -20,25 +20,34 @@ pub trait NC_Server {
     fn process_data_from_node(&mut self, data: &Vec<u8>);
 }
 
-async fn start_server<T: 'static + NC_Server + Send>(server: T) -> Result<(), NCError> {
+async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NCError> {
 
     let addr = "127.0.0.1:9000".to_string();
     let mut socket = TcpListener::bind(&addr).await.map_err(|e| NCError::TcpBind(e))?;
     debug!("Listening on: {}", addr);
 
     let quit = Arc::new(Mutex::new(false));
-    let server = Arc::new(Mutex::new(server));
+    let nc_server = Arc::new(Mutex::new(nc_server));
 
     while !(*quit.lock().map_err(|_| NCError::QuitLock)?) {
         let (stream, node) = socket.accept().await.map_err(|e| NCError::SocketAccept(e))?;
+        let nc_server = nc_server.clone();
+        let quit = quit.clone();
+
         debug!("Connection from: {}", node.to_string());
-        tokio::spawn(handle_node(server.clone(), stream, quit.clone()));
+
+        tokio::spawn(async move {
+            match handle_node(nc_server, stream, quit).await {
+                Ok(_) => debug!("handle node finished"),
+                Err(e) => debug!("handle node returned an error: {}", e),
+            }
+        });
     }
 
     Ok(())
 }
 
-async fn handle_node<T: NC_Server + Send>(server: Arc<Mutex<T>>, mut stream: TcpStream, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
+async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStream, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     
@@ -53,9 +62,9 @@ async fn handle_node<T: NC_Server + Send>(server: Arc<Mutex<T>>, mut stream: Tcp
 
         }
         NodeMessage::NodeHasData(new_data) => {
-            let mut server = server.lock().map_err(|_| NCError::ServerLock)?;
-            server.process_data_from_node(&new_data);
-            if server.finished() {
+            let mut nc_server = nc_server.lock().map_err(|_| NCError::ServerLock)?;
+            nc_server.process_data_from_node(&new_data);
+            if nc_server.finished() {
                 let mut quit = quit.lock().map_err(|_| NCError::QuitLock)?;
                 *quit = true;
             }
