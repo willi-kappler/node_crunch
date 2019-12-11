@@ -32,6 +32,8 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) {
     rand::thread_rng().fill(&mut bytes[..]);
     let node_id: u128 = u128::from_le_bytes(bytes);
 
+    debug!("Current node id: {}", node_id);
+
     loop {
         match node_worker(&mut nc_node, &addr, node_id).await {
             Ok(quit) => {
