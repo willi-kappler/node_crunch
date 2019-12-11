@@ -8,14 +8,16 @@ use log::{info, error, debug};
 use serde::{Serialize, Deserialize};
 use bincode::{deserialize, serialize};
 
+use rand::{self, Rng};
+
 use crate::nc_error::{NC_Error};
 use crate::nc_server::{NC_ServerMessage};
 use crate::nc_util::{nc_send_message, nc_receive_message};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NC_NodeMessage {
-    NodeNeedsData,
-    NodeHasData(Vec<u8>),
+    NodeNeedsData(u128),
+    NodeHasData((u128, Vec<u8>)),
 }
 
 pub trait NC_Node {
@@ -26,8 +28,12 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) {
     // TODO: read from config file
     let addr = "127.0.0.1:9000".to_string();
 
+    let mut bytes = [0u8; 16];
+    rand::thread_rng().fill(&mut bytes[..]);
+    let node_id: u128 = u128::from_le_bytes(bytes);
+
     loop {
-        match node_worker(&mut nc_node, &addr).await {
+        match node_worker(&mut nc_node, &addr, node_id).await {
             Ok(quit) => {
                 if quit {
                     debug!("Job is finished, exit loop");
@@ -42,7 +48,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) {
     }
 }
 
-pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str) -> Result<bool, NC_Error> {
+pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128) -> Result<bool, NC_Error> {
     let mut quit = false;
 
     debug!("Connecting to server: {}", addr);
@@ -52,7 +58,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str) -> Result<bool
     let mut buf_writer = BufWriter::new(writer);
 
     debug!("Encoding message NodeNeedsData");
-    let message = nc_encode(NC_NodeMessage::NodeNeedsData)?;
+    let message = nc_encode(NC_NodeMessage::NodeNeedsData(node_id))?;
 
     debug!("Sending message to server");
     nc_send_message(&mut buf_writer, message).await?;
@@ -73,7 +79,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str) -> Result<bool
             // TODO: this may take a lot of time
             let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?;
             debug!("Encoding message NodeHasData");
-            let message = nc_encode(NC_NodeMessage::NodeHasData(processed_data))?;
+            let message = nc_encode(NC_NodeMessage::NodeHasData((node_id, processed_data)))?;
 
             debug!("Send message back to server");
             nc_send_message(&mut buf_writer, message).await?;

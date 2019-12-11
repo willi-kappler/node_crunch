@@ -21,8 +21,8 @@ pub enum NC_ServerMessage {
 
 pub trait NC_Server {
     fn finished(&self) -> bool;
-    fn prepare_data_for_node(&mut self) -> Result<Vec<u8>, u8>;
-    fn process_data_from_node(&mut self, data: &Vec<u8>) -> Result<(), u8>;
+    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, u8>;
+    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), u8>;
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {
@@ -64,7 +64,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
     debug!("Decoding message");
     match nc_decode(buffer)? {
-        NC_NodeMessage::NodeNeedsData => {
+        NC_NodeMessage::NodeNeedsData(node_id) => {
             let quit = *quit.lock().map_err(|_| NC_Error::QuitLock)?;
             if quit {
                 debug!("Encoding message ServerFinished");
@@ -79,7 +79,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                     let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
                     debug!("Prepare new data for node");
                     // TODO: this may take a lot of time
-                    nc_server.prepare_data_for_node().map_err(|e| NC_Error::ServerPrepare(e))?
+                    nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))?
                 }; // Mutex for nc_server needs to be dropped here
 
                 debug!("Encofing message ServerHasData");
@@ -92,14 +92,14 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 debug!("New data sent to node, message_length: {}", message_length);
             }
         }
-        NC_NodeMessage::NodeHasData(new_data) => {
-            debug!("New processed data received from node");
+        NC_NodeMessage::NodeHasData((node_id, new_data)) => {
+            debug!("New processed data received from node: {}", node_id);
             let finished = {
                 let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
-                debug!("Processing data from node");
+                debug!("Processing data from node: {}", node_id);
                 // TODO: this may take a lot of time
-                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e))?;
+                nc_server.process_data_from_node(node_id, &new_data).map_err(|e| NC_Error::ServerProcess(e))?;
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
 
@@ -113,7 +113,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 debug!("Encoding message ServerFinished");
                 let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerFinished)?;
 
-                debug!("Sending message to node");
+                debug!("Sending message to node: {}", node_id);
                 nc_send_message(&mut buf_writer, message).await?;
             }
         }
