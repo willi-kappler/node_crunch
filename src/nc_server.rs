@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::error;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
@@ -20,8 +21,8 @@ pub enum NC_ServerMessage {
 
 pub trait NC_Server {
     fn finished(&self) -> bool;
-    fn prepare_data_for_node(&mut self) -> Vec<u8>; // TODO: this may fail
-    fn process_data_from_node(&mut self, data: &Vec<u8>); // TODO: this may fail
+    fn prepare_data_for_node(&mut self) -> Result<Vec<u8>, u8>;
+    fn process_data_from_node(&mut self, data: &Vec<u8>) -> Result<(), u8>;
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {
@@ -72,7 +73,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
             } else {
                 let new_data = {
                     let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-                    nc_server.prepare_data_for_node() // TODO: this may take a lot of time
+                    nc_server.prepare_data_for_node().map_err(|e| NC_Error::ServerPrepare(e))? // TODO: this may take a lot of time
                 }; // Mutex for nc_server needs to be dropped here
 
                 let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerHasData(new_data))?;
@@ -86,7 +87,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
         NC_NodeMessage::NodeHasData(new_data) => {
             let finished = {
                 let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-                nc_server.process_data_from_node(&new_data);  // TODO: this may take a lot of time
+                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e));  // TODO: this may take a lot of time
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
 

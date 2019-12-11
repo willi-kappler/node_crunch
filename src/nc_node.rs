@@ -1,3 +1,5 @@
+use std::error;
+
 use tokio::net::TcpStream;
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
 
@@ -17,7 +19,7 @@ pub enum NC_NodeMessage {
 }
 
 pub trait NC_Node {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Vec<u8>; // TODO: this may fail
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, u8>; // TODO: this may fail
 }
 
 pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NC_Error> {
@@ -43,7 +45,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NC_Error> {
         match nc_decode(buffer)? {
             NC_ServerMessage::ServerFinished => quit = true,
             NC_ServerMessage::ServerHasData(data) => {
-                let processed_data = nc_node.process_data_from_server(data); // TODO: this may take a lot of time
+                let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?; // TODO: this may take a lot of time
                 let message = nc_encode(NC_NodeMessage::NodeHasData(processed_data))?;
 
                 nc_send_message(&mut buf_writer, message).await?;

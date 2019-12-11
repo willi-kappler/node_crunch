@@ -1,4 +1,6 @@
 use std::{error, fmt, io};
+use std::sync::{Arc};
+
 use bincode;
 
 #[derive(Debug)]
@@ -14,6 +16,9 @@ pub enum NC_Error {
     WriteBuffer(io::Error),
     Serialize(bincode::Error),
     Deserialize(bincode::Error),
+    NodeProcess(u8),
+    ServerPrepare(u8),
+    ServerProcess(u8),
 }
 
 impl fmt::Display for NC_Error {
@@ -30,6 +35,9 @@ impl fmt::Display for NC_Error {
             NC_Error::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
             NC_Error::Serialize(e) => write!(f, "Serialize error: {}", e),
             NC_Error::Deserialize(e) => write!(f, "Deserialize error: {}", e),
+            NC_Error::NodeProcess(e) => write!(f, "NodeProcess error: {}", e),
+            NC_Error::ServerPrepare(e) => write!(f, "ServerPrepare error: {}", e),
+            NC_Error::ServerProcess(e) => write!(f, "ServerProcess error: {}", e),
         }        
     }
 }
@@ -48,6 +56,9 @@ impl error::Error for NC_Error {
             NC_Error::WriteBuffer(e) => Some(e),
             NC_Error::Serialize(e) => Some(e),
             NC_Error::Deserialize(e) => Some(e),
+            NC_Error::NodeProcess(_) => None,
+            NC_Error::ServerPrepare(_) => None,
+            NC_Error::ServerProcess(_) => None,
         }
     }
 }
