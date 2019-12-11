@@ -82,6 +82,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
             debug!("Received ServerHasData");
             debug!("Processing data...");
             // TODO: this may take a lot of time
+            // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
             let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?;
             debug!("Encoding message NodeHasData");
             let message = nc_encode(NC_NodeMessage::NodeHasData((node_id, processed_data)))?;

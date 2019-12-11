@@ -79,6 +79,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                     let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
                     debug!("Prepare new data for node");
                     // TODO: this may take a lot of time
+                    // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
                     nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))?
                 }; // Mutex for nc_server needs to be dropped here
 
@@ -99,6 +100,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
 
                 debug!("Processing data from node: {}", node_id);
                 // TODO: this may take a lot of time
+                // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
                 nc_server.process_data_from_node(node_id, &new_data).map_err(|e| NC_Error::ServerProcess(e))?;
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
