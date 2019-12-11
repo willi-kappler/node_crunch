@@ -2,6 +2,7 @@
 
 use structopt::StructOpt;
 use log4rs;
+use tokio;
 
 mod server;
 mod node;
@@ -32,7 +33,8 @@ fn create_logger(filename: &str) {
     let _log_handle = log4rs::init_config(config).unwrap();
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let options = Simple1Opt::from_args();
 
     if options.server {
