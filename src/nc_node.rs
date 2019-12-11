@@ -22,38 +22,53 @@ pub trait NC_Node {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, u8>;
 }
 
-pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NC_Error> {
+pub async fn start_node<T: NC_Node>(mut nc_node: T) {
     let addr = "127.0.0.1:9000".to_string(); // TODO: read from config file
-    let mut quit = false;
 
     debug!("Connected to server: {}", addr);
 
-    while !quit {
-        let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
-        let (reader, writer) = stream.split();
-        let mut buf_reader = BufReader::new(reader);
-        let mut buf_writer = BufWriter::new(writer);
-
-        let message = nc_encode(NC_NodeMessage::NodeNeedsData)?;
-
-        nc_send_message(&mut buf_writer, message).await?;
-
-        let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
-
-        debug!("start_node: number of bytes read: {}", num_of_bytes_read);
-
-        match nc_decode(buffer)? {
-            NC_ServerMessage::ServerFinished => quit = true,
-            NC_ServerMessage::ServerHasData(data) => {
-                let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?; // TODO: this may take a lot of time
-                let message = nc_encode(NC_NodeMessage::NodeHasData(processed_data))?;
-
-                nc_send_message(&mut buf_writer, message).await?;
+    loop {
+        match node_worker(&mut nc_node, &addr).await {
+            Ok(quit) => {
+                if quit {
+                    debug!("Job is finished, exit loop");
+                    break
+                }
+            }
+            Err(e) => {
+                error!("An error occurred: {}", e);
+                debug!("Retry in 10 seconds");
             }
         }
     }
+}
 
-    Ok(())
+pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str) -> Result<bool, NC_Error> {
+    let mut quit = false;
+    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
+    let (reader, writer) = stream.split();
+    let mut buf_reader = BufReader::new(reader);
+    let mut buf_writer = BufWriter::new(writer);
+
+    let message = nc_encode(NC_NodeMessage::NodeNeedsData)?;
+
+    nc_send_message(&mut buf_writer, message).await?;
+
+    let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
+
+    debug!("start_node: number of bytes read: {}", num_of_bytes_read);
+
+    match nc_decode(buffer)? {
+        NC_ServerMessage::ServerFinished => quit = true,
+        NC_ServerMessage::ServerHasData(data) => {
+            let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?; // TODO: this may take a lot of time
+            let message = nc_encode(NC_NodeMessage::NodeHasData(processed_data))?;
+
+            nc_send_message(&mut buf_writer, message).await?;
+        }
+    }
+
+    Ok(quit)
 }
 
 fn nc_encode(message: NC_NodeMessage) -> Result<Vec<u8>, NC_Error> {
