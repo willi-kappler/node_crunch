@@ -1,7 +1,9 @@
 use std::error;
+use std::time::Duration;
 
 use tokio::net::TcpStream;
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
+use tokio::time::delay_for;
 
 use log::{info, error, debug};
 
@@ -45,6 +47,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) {
             Err(e) => {
                 error!("An error occurred: {}", e);
                 debug!("Retry in 10 seconds");
+                delay_for(Duration::from_secs(10)).await;
             }
         }
     }
