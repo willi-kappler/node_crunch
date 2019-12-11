@@ -1,0 +1,20 @@
+[package]
+name = "mandel1"
+version = "0.1.0"
+authors = ["Willi Kappler <grandor@gmx.de"]
+description = "A crate for distributed computing"
+keywords = ["distribute", "network", "numeric", "computing", "cluster"]
+categories = ["Network programming", "Science"]
+edition = "2018"
+
+[dependencies]
+tokio = { version = "0.2", features = ["full"] }
+log = "0.4"
+log4rs = "0.8"
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+structopt = "0.2"
+node_crunch = {path = "../../../node_crunch"}
+
+[profile.release]
+lto = true
