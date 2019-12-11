@@ -5,15 +5,15 @@ use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteE
 
 use log::{info, error, debug};
 
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use bincode::{deserialize, serialize};
 
-use crate::error::{NCError};
-use crate::nc_node::{NodeMessage};
-use crate::util::{send_message, receive_message};
+use crate::nc_error::{NC_Error};
+use crate::nc_node::{NC_NodeMessage};
+use crate::nc_util::{nc_send_message, nc_receive_message};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ServerMessage {
+pub enum NC_ServerMessage {
     ServerHasData(Vec<u8>),
     ServerFinished,
 }
@@ -24,17 +24,17 @@ pub trait NC_Server {
     fn process_data_from_node(&mut self, data: &Vec<u8>); // TODO: this may fail
 }
 
-pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NCError> {
+pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {
     let addr = "0.0.0.0:9000".to_string(); // TODO: read from config file
-    let mut socket = TcpListener::bind(&addr).await.map_err(|e| NCError::TcpBind(e))?;
+    let mut socket = TcpListener::bind(&addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
 
     let quit = Arc::new(Mutex::new(false));
     let nc_server = Arc::new(Mutex::new(nc_server));
 
-    while !(*quit.lock().map_err(|_| NCError::QuitLock)?) {
-        let (stream, node) = socket.accept().await.map_err(|e| NCError::SocketAccept(e))?;
+    while !(*quit.lock().map_err(|_| NC_Error::QuitLock)?) {
+        let (stream, node) = socket.accept().await.map_err(|e| NC_Error::SocketAccept(e))?;
         let nc_server = nc_server.clone();
         let quit = quit.clone();
 
@@ -51,41 +51,41 @@ pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result
     Ok(())
 }
 
-async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStream, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
+async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStream, quit: Arc<Mutex<bool>>) -> Result<(), NC_Error> {
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
     
-    let (num_of_bytes_read, buffer) = receive_message(&mut buf_reader).await?;
+    let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
 
     debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
 
-    match decode(buffer)? {
-        NodeMessage::NodeNeedsData => {
-            let quit = *quit.lock().map_err(|_| NCError::QuitLock)?;
+    match nc_decode(buffer)? {
+        NC_NodeMessage::NodeNeedsData => {
+            let quit = *quit.lock().map_err(|_| NC_Error::QuitLock)?;
             if quit {
-                let message = encode(ServerMessage::ServerFinished)?;
+                let message = nc_encode(NC_ServerMessage::ServerFinished)?;
 
-                send_message(&mut buf_writer, message).await?;
+                nc_send_message(&mut buf_writer, message).await?;
 
                 debug!("No more data for node, server has finished");
             } else {
                 let new_data = {
-                    let mut nc_server = nc_server.lock().map_err(|_| NCError::ServerLock)?;
+                    let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
                     nc_server.prepare_data_for_node() // TODO: this may take a lot of time
                 }; // Mutex for nc_server needs to be dropped here
 
-                let message: Vec<u8> = encode(ServerMessage::ServerHasData(new_data))?;
+                let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerHasData(new_data))?;
                 let message_length = message.len() as u64;
 
-                send_message(&mut buf_writer, message).await?;
+                nc_send_message(&mut buf_writer, message).await?;
     
                 debug!("New data sent to node, message_length: {}", message_length);
             }
         }
-        NodeMessage::NodeHasData(new_data) => {
+        NC_NodeMessage::NodeHasData(new_data) => {
             let finished = {
-                let mut nc_server = nc_server.lock().map_err(|_| NCError::ServerLock)?;
+                let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
                 nc_server.process_data_from_node(&new_data);  // TODO: this may take a lot of time
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
@@ -94,13 +94,13 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
 
             if finished {
                 {
-                    let mut quit = quit.lock().map_err(|_| NCError::QuitLock)?;
+                    let mut quit = quit.lock().map_err(|_| NC_Error::QuitLock)?;
                     *quit = true;
                 } // Mutex for quit needs to be dropped here
 
-                let message: Vec<u8> = encode(ServerMessage::ServerFinished)?;
+                let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerFinished)?;
 
-                send_message(&mut buf_writer, message).await?;
+                nc_send_message(&mut buf_writer, message).await?;
 
                 debug!("Job is finished!");
             }
@@ -110,10 +110,10 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     Ok(())
 }
 
-fn encode(message: ServerMessage) -> Result<Vec<u8>, NCError> {
-    serialize(&message).map_err(|e| NCError::Serialize(e))
+fn nc_encode(message: NC_ServerMessage) -> Result<Vec<u8>, NC_Error> {
+    serialize(&message).map_err(|e| NC_Error::Serialize(e))
 }
 
-fn decode(buffer: Vec<u8>) -> Result<NodeMessage, NCError> {
-    deserialize(&buffer).map_err(|e| NCError::Deserialize(e))
+fn nc_decode(buffer: Vec<u8>) -> Result<NC_NodeMessage, NC_Error> {
+    deserialize(&buffer).map_err(|e| NC_Error::Deserialize(e))
 }
