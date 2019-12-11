@@ -26,7 +26,8 @@ pub trait NC_Server {
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {
-    let addr = "0.0.0.0:9000".to_string(); // TODO: read from config file
+    // TODO: read from config file
+    let addr = "0.0.0.0:9000".to_string();
     let mut socket = TcpListener::bind(&addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
@@ -57,53 +58,63 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
     
+    debug!("Receiving message from node");
     let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
 
     debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
-
+    debug!("Decoding message");
     match nc_decode(buffer)? {
         NC_NodeMessage::NodeNeedsData => {
             let quit = *quit.lock().map_err(|_| NC_Error::QuitLock)?;
             if quit {
+                debug!("Encoding message ServerFinished");
                 let message = nc_encode(NC_ServerMessage::ServerFinished)?;
 
+                debug!("Sending message to node");
                 nc_send_message(&mut buf_writer, message).await?;
 
                 debug!("No more data for node, server has finished");
             } else {
                 let new_data = {
                     let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-                    nc_server.prepare_data_for_node().map_err(|e| NC_Error::ServerPrepare(e))? // TODO: this may take a lot of time
+                    debug!("Prepare new data for node");
+                    // TODO: this may take a lot of time
+                    nc_server.prepare_data_for_node().map_err(|e| NC_Error::ServerPrepare(e))?
                 }; // Mutex for nc_server needs to be dropped here
 
+                debug!("Encofing message ServerHasData");
                 let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerHasData(new_data))?;
                 let message_length = message.len() as u64;
 
+                debug!("Sending message to node");
                 nc_send_message(&mut buf_writer, message).await?;
     
                 debug!("New data sent to node, message_length: {}", message_length);
             }
         }
         NC_NodeMessage::NodeHasData(new_data) => {
+            debug!("New processed data received from node");
             let finished = {
                 let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e))?;  // TODO: this may take a lot of time
+
+                debug!("Processing data from node");
+                // TODO: this may take a lot of time
+                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e))?;
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
 
-            debug!("New processed data received from node");
-
             if finished {
+                debug!("Job is finished!");
                 {
                     let mut quit = quit.lock().map_err(|_| NC_Error::QuitLock)?;
                     *quit = true;
                 } // Mutex for quit needs to be dropped here
 
+                debug!("Encoding message ServerFinished");
                 let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerFinished)?;
 
+                debug!("Sending message to node");
                 nc_send_message(&mut buf_writer, message).await?;
-
-                debug!("Job is finished!");
             }
         }
     }
