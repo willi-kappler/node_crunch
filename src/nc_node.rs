@@ -19,7 +19,7 @@ pub enum NC_NodeMessage {
 }
 
 pub trait NC_Node {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, u8>; // TODO: this may fail
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, u8>;
 }
 
 pub async fn start_node<T: NC_Node>(mut nc_node: T) -> Result<(), NC_Error> {

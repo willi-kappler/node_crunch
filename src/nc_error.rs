@@ -1,5 +1,4 @@
 use std::{error, fmt, io};
-use std::sync::{Arc};
 
 use bincode;
 

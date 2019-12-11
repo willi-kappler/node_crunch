@@ -87,7 +87,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
         NC_NodeMessage::NodeHasData(new_data) => {
             let finished = {
                 let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e));  // TODO: this may take a lot of time
+                nc_server.process_data_from_node(&new_data).map_err(|e| NC_Error::ServerProcess(e))?;  // TODO: this may take a lot of time
                 nc_server.finished()
             }; // Mutex for nc_server needs to be dropped here
 
