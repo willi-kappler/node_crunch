@@ -7,7 +7,7 @@ use tokio::task;
 
 use log::{info, error, debug};
 
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde::{Serialize, Deserialize};
 use bincode::{deserialize, serialize};
 
 use crate::nc_error::{NC_Error};

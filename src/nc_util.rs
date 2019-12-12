@@ -1,5 +1,8 @@
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
 
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use bincode::{deserialize, serialize};
+
 use crate::nc_error::{NC_Error};
 
 pub async fn nc_send_message<T: AsyncWriteExt + Unpin>(buf_writer: &mut T, message: Vec<u8>) -> Result<(), NC_Error> {
@@ -14,4 +17,12 @@ pub async fn nc_receive_message<T: AsyncBufReadExt + Unpin>(buf_reader: &mut T) 
     let num_of_bytes_read: usize = buf_reader.read(&mut buffer[..]).await.map_err(|e| NC_Error::ReadBuffer(e))?;
 
     Ok((num_of_bytes_read, buffer))
+}
+
+pub fn nc_encode_data<T: Serialize>(data: &T) -> Result<Vec<u8>, NC_Error> {
+    serialize(data).map_err(|e| NC_Error::Serialize(e))
+}
+
+pub fn nc_decode_data<'de, T: Deserialize<'de>>(data: &'de Vec<u8>) -> Result<T, NC_Error> {
+    deserialize(data).map_err(|e| NC_Error::Deserialize(e))
 }
