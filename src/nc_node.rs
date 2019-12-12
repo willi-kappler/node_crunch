@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
 use tokio::time::delay_for;
+use tokio::task;
 
 use log::{info, error, debug};
 
@@ -81,9 +82,11 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
         NC_ServerMessage::ServerHasData(data) => {
             debug!("Received ServerHasData");
             debug!("Processing data...");
-            // TODO: this may take a lot of time
-            // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
-            let processed_data = nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))?;
+
+            let processed_data = task::block_in_place(move || {
+                nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))
+            })?;
+
             debug!("Encoding message NodeHasData");
             let message = nc_encode(NC_NodeMessage::NodeHasData((node_id, processed_data)))?;
 
