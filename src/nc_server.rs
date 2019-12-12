@@ -22,8 +22,8 @@ pub enum NC_ServerMessage {
 
 pub trait NC_Server {
     fn finished(&self) -> bool;
-    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, u8>;
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), u8>;
+    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, String>;
+    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), String>;
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {

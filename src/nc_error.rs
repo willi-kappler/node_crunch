@@ -15,9 +15,9 @@ pub enum NC_Error {
     WriteBuffer(io::Error),
     Serialize(bincode::Error),
     Deserialize(bincode::Error),
-    NodeProcess(u8),
-    ServerPrepare(u8),
-    ServerProcess(u8),
+    NodeProcess(String),
+    ServerPrepare(String),
+    ServerProcess(String),
 }
 
 impl fmt::Display for NC_Error {
