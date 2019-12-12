@@ -1,5 +1,6 @@
 use std::time::Duration;
 use std::error;
+use std::net::{IpAddr, SocketAddr};
 
 use tokio::net::TcpStream;
 use tokio::io::{BufReader, BufWriter};
@@ -15,20 +16,21 @@ use rand::{self, Rng};
 use crate::nc_error::{NC_Error};
 use crate::nc_server::{NC_ServerMessage};
 use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data};
+use crate::nc_config::{NC_Configuration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NC_NodeMessage {
     NodeNeedsData(u128),
     NodeHasData((u128, Vec<u8>)),
+    // NodeHeartBeat(u128),
 }
 
 pub trait NC_Node {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
 }
 
-pub async fn start_node<T: NC_Node>(mut nc_node: T) {
-    // TODO: read from config file
-    let addr = "127.0.0.1:9000".to_string();
+pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) -> Result<(), NC_Error> {
+    let addr = SocketAddr::new(config.address.parse().map_err(|e| NC_Error::IPAddr(e))?, config.port);
 
     let mut bytes = [0u8; 16];
     rand::thread_rng().fill(&mut bytes[..]);
@@ -47,13 +49,15 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T) {
             Err(e) => {
                 error!("An error occurred: {}", e);
                 debug!("Retry in 10 seconds");
-                delay_for(Duration::from_secs(10)).await;
+                delay_for(Duration::from_secs(config.reconnect_wait)).await;
             }
         }
     }
+
+    Ok(())
 }
 
-pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128) -> Result<bool, NC_Error> {
+pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, node_id: u128) -> Result<bool, NC_Error> {
     let mut quit = false;
 
     debug!("Connecting to server: {}", addr);

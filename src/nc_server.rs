@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::error;
+use std::net::{IpAddr, SocketAddr};
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{BufReader, BufWriter};
@@ -12,11 +13,13 @@ use serde::{Serialize, Deserialize};
 use crate::nc_error::{NC_Error};
 use crate::nc_node::{NC_NodeMessage};
 use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data};
+use crate::nc_config::{NC_Configuration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NC_ServerMessage {
     ServerHasData(Vec<u8>),
     ServerFinished,
+    // ServerHeartBeatOK,
 }
 
 pub trait NC_Server {
@@ -25,10 +28,9 @@ pub trait NC_Server {
     fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), Box<dyn error::Error + Send>>;
 }
 
-pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {
-    // TODO: read from config file
-    let addr = "0.0.0.0:9000".to_string();
-    let mut socket = TcpListener::bind(&addr).await.map_err(|e| NC_Error::TcpBind(e))?;
+pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
+    let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), config.port);
+    let mut socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
 

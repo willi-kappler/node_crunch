@@ -1,9 +1,10 @@
-use std::{error, fmt, io};
+use std::{error, fmt, io, net};
 
 use bincode;
 
 #[derive(Debug)]
 pub enum NC_Error {
+    IPAddr(net::AddrParseError),
     TcpBind(io::Error),
     TcpConnect(io::Error),
     SocketAccept(io::Error),
@@ -23,6 +24,7 @@ pub enum NC_Error {
 impl fmt::Display for NC_Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            NC_Error::IPAddr(e) => write!(f, "IPAddr error: {}", e),
             NC_Error::TcpBind(e) => write!(f, "TcpBind error: {}", e),
             NC_Error::TcpConnect(e) => write!(f, "TcpConnect error: {}", e),
             NC_Error::SocketAccept(e) => write!(f, "SocketAccept error: {}", e),
@@ -44,6 +46,7 @@ impl fmt::Display for NC_Error {
 impl error::Error for NC_Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            NC_Error::IPAddr(e) => Some(e),
             NC_Error::TcpBind(e) => Some(e),
             NC_Error::TcpConnect(e) => Some(e),
             NC_Error::SocketAccept(e) => Some(e),

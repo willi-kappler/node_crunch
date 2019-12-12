@@ -4,11 +4,13 @@
 // - Add heart beat from node
 // - Add TLS / encryption / secure connection
 // - Add authentication ?
-// - Add configuration file
-// - Refactor encode / decode functions
+// - Use atomic bool
+// - Refactor server.finished()
+
 
 
 mod nc_server;
 mod nc_node;
 mod nc_error;
 mod nc_util;
+mod nc_config;
