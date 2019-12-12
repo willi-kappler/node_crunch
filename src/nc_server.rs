@@ -23,9 +23,8 @@ pub enum NC_ServerMessage {
 }
 
 pub trait NC_Server {
-    fn finished(&self) -> bool;
     fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), Box<dyn error::Error + Send>>;
+    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<bool, Box<dyn error::Error + Send>>;
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
@@ -105,7 +104,6 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 task::block_in_place(move || {
                     nc_server.process_data_from_node(node_id, &new_data)
                         .map_err(|e| NC_Error::ServerProcess(e))
-                        .map(|_| nc_server.finished())
                 })?
             }; // Mutex for nc_server needs to be dropped here
 

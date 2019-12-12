@@ -5,7 +5,6 @@
 // - Add TLS / encryption / secure connection
 // - Add authentication ?
 // - Use atomic bool
-// - Refactor server.finished()
 
 
 
