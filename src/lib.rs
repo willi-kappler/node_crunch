@@ -1,10 +1,11 @@
 
 
 // TODO:
-// - Add node id (hash from node ip address ?)
 // - Add heart beat from node
 // - Add TLS / encryption / secure connection
 // - Add authentication ?
+// - Add configuration file
+// - Refactor encode / decode functions
 
 
 mod nc_server;
