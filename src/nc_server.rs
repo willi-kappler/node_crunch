@@ -7,11 +7,10 @@ use tokio::task;
 use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
-use bincode::{deserialize, serialize};
 
 use crate::nc_error::{NC_Error};
 use crate::nc_node::{NC_NodeMessage};
-use crate::nc_util::{nc_send_message, nc_receive_message};
+use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NC_ServerMessage {
@@ -63,12 +62,12 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
 
     debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
     debug!("Decoding message");
-    match nc_decode(buffer)? {
+    match nc_decode_data(&buffer)? {
         NC_NodeMessage::NodeNeedsData(node_id) => {
             let quit = *quit.lock().map_err(|_| NC_Error::QuitLock)?;
             if quit {
                 debug!("Encoding message ServerFinished");
-                let message = nc_encode(NC_ServerMessage::ServerFinished)?;
+                let message = nc_encode_data(&NC_ServerMessage::ServerFinished)?;
 
                 debug!("Sending message to node");
                 nc_send_message(&mut buf_writer, message).await?;
@@ -85,7 +84,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 }; // Mutex for nc_server needs to be dropped here
 
                 debug!("Encoding message ServerHasData");
-                let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerHasData(new_data))?;
+                let message = nc_encode_data(&NC_ServerMessage::ServerHasData(new_data))?;
                 let message_length = message.len() as u64;
 
                 debug!("Sending message to node");
@@ -115,7 +114,7 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 } // Mutex for quit needs to be dropped here
 
                 debug!("Encoding message ServerFinished");
-                let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerFinished)?;
+                let message = nc_encode_data(&NC_ServerMessage::ServerFinished)?;
 
                 debug!("Sending message to node: {}", node_id);
                 nc_send_message(&mut buf_writer, message).await?;
@@ -124,12 +123,4 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
     }
 
     Ok(())
-}
-
-fn nc_encode(message: NC_ServerMessage) -> Result<Vec<u8>, NC_Error> {
-    serialize(&message).map_err(|e| NC_Error::Serialize(e))
-}
-
-fn nc_decode(buffer: Vec<u8>) -> Result<NC_NodeMessage, NC_Error> {
-    deserialize(&buffer).map_err(|e| NC_Error::Deserialize(e))
 }

@@ -8,13 +8,12 @@ use tokio::task;
 use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
-use bincode::{deserialize, serialize};
 
 use rand::{self, Rng};
 
 use crate::nc_error::{NC_Error};
 use crate::nc_server::{NC_ServerMessage};
-use crate::nc_util::{nc_send_message, nc_receive_message};
+use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NC_NodeMessage {
@@ -63,7 +62,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
     let mut buf_writer = BufWriter::new(writer);
 
     debug!("Encoding message NodeNeedsData");
-    let message = nc_encode(NC_NodeMessage::NodeNeedsData(node_id))?;
+    let message = nc_encode_data(&NC_NodeMessage::NodeNeedsData(node_id))?;
 
     debug!("Sending message to server");
     nc_send_message(&mut buf_writer, message).await?;
@@ -73,7 +72,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
 
     debug!("Number of bytes read: {}", num_of_bytes_read);
     debug!("Decoding message");
-    match nc_decode(buffer)? {
+    match nc_decode_data(&buffer)? {
         NC_ServerMessage::ServerFinished => {
             debug!("Received ServerFinished");
             quit = true;
@@ -87,7 +86,7 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
             })?;
 
             debug!("Encoding message NodeHasData");
-            let message = nc_encode(NC_NodeMessage::NodeHasData((node_id, processed_data)))?;
+            let message = nc_encode_data(&NC_NodeMessage::NodeHasData((node_id, processed_data)))?;
 
             debug!("Send message back to server");
             nc_send_message(&mut buf_writer, message).await?;
@@ -95,12 +94,4 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &str, node_id: u128)
     }
 
     Ok(quit)
-}
-
-fn nc_encode(message: NC_NodeMessage) -> Result<Vec<u8>, NC_Error> {
-    serialize(&message).map_err(|e| NC_Error::Serialize(e))
-}
-
-fn nc_decode(buffer: Vec<u8>) -> Result<NC_ServerMessage, NC_Error> {
-    deserialize(&buffer).map_err(|e| NC_Error::Deserialize(e))
 }
