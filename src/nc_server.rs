@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::error;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{BufReader, BufWriter};
@@ -20,8 +21,8 @@ pub enum NC_ServerMessage {
 
 pub trait NC_Server {
     fn finished(&self) -> bool;
-    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, String>;
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), String>;
+    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
+    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), Box<dyn error::Error + Send>>;
 }
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T) -> Result<(), NC_Error> {

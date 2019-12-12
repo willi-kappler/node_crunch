@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::error;
 
 use tokio::net::TcpStream;
 use tokio::io::{BufReader, BufWriter};
@@ -22,7 +23,7 @@ pub enum NC_NodeMessage {
 }
 
 pub trait NC_Node {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, String>;
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
 }
 
 pub async fn start_node<T: NC_Node>(mut nc_node: T) {
