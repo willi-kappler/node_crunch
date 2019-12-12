@@ -3,6 +3,7 @@ use std::error;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{BufReader, BufWriter, AsyncReadExt, AsyncBufReadExt, AsyncWriteExt};
+use tokio::task;
 
 use log::{info, error, debug};
 
@@ -77,13 +78,14 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
             } else {
                 let new_data = {
                     let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
+
                     debug!("Prepare new data for node");
-                    // TODO: this may take a lot of time
-                    // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
-                    nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))?
+                    task::block_in_place(move || {
+                        nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
+                    })?
                 }; // Mutex for nc_server needs to be dropped here
 
-                debug!("Encofing message ServerHasData");
+                debug!("Encoding message ServerHasData");
                 let message: Vec<u8> = nc_encode(NC_ServerMessage::ServerHasData(new_data))?;
                 let message_length = message.len() as u64;
 
@@ -99,10 +101,11 @@ async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>, mut stream: TcpStre
                 let mut nc_server = nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
                 debug!("Processing data from node: {}", node_id);
-                // TODO: this may take a lot of time
-                // See https://docs.rs/tokio/0.2.4/tokio/task/fn.spawn_blocking.html
-                nc_server.process_data_from_node(node_id, &new_data).map_err(|e| NC_Error::ServerProcess(e))?;
-                nc_server.finished()
+                task::block_in_place(move || {
+                    nc_server.process_data_from_node(node_id, &new_data)
+                        .map_err(|e| NC_Error::ServerProcess(e))
+                        .map(|_| nc_server.finished())
+                })?
             }; // Mutex for nc_server needs to be dropped here
 
             if finished {
