@@ -22,7 +22,7 @@ use crate::nc_config::{NC_Configuration};
 pub enum NC_NodeMessage {
     NeedsData(u128),
     HasData((u128, Vec<u8>)),
-    // NodeHeartBeat(u128),
+    HeartBeat(u128),
 }
 
 pub trait NC_Node {
