@@ -58,9 +58,9 @@ impl error::Error for NC_Error {
             NC_Error::WriteBuffer(e) => Some(e),
             NC_Error::Serialize(e) => Some(e),
             NC_Error::Deserialize(e) => Some(e),
-            NC_Error::NodeProcess(e) => None, // Some(e) doesn't work
-            NC_Error::ServerPrepare(e) => None, // Some(e) doesn't work
-            NC_Error::ServerProcess(e) => None, // Some(e) doesn't work
+            NC_Error::NodeProcess(_e) => None, // Some(e) doesn't work
+            NC_Error::ServerPrepare(_e) => None, // Some(e) doesn't work
+            NC_Error::ServerProcess(_e) => None, // Some(e) doesn't work
         }
     }
 }

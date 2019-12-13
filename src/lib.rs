@@ -4,8 +4,8 @@
 // - Add heart beat from node
 // - Add TLS / encryption / secure connection
 // - Add authentication ?
-// - Use atomic bool
-
+// - Add payload to NodeNeedsData() ?
+// - encode and decode may take time, use block_in_place
 
 
 mod nc_server;

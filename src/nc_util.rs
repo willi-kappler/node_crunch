@@ -5,6 +5,13 @@ use bincode::{deserialize, serialize};
 
 use crate::nc_error::{NC_Error};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NC_JobStatus {
+    Unfinished,
+    Waiting,
+    Finished,
+}
+
 pub async fn nc_send_message<T: AsyncWriteExt + Unpin>(buf_writer: &mut T, message: Vec<u8>) -> Result<(), NC_Error> {
     buf_writer.write_u64(message.len() as u64).await.map_err(|e| NC_Error::WriteU64(e))?;
     buf_writer.write(&message).await.map_err(|e| NC_Error::WriteBuffer(e))?;
