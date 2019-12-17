@@ -63,13 +63,20 @@ async fn check_heartbeat<T: 'static + NC_Server + Send>(
                         break
                     } else {
                         match connected_nodes.lock() {
-                            Ok(connected_nodes) => {
+                            Ok(mut connected_nodes) => {
+                                let mut dead_nodes = Vec::new();
+
                                 for (node_id, heartbeat_time) in connected_nodes.iter() {
                                     if heartbeat_time.elapsed().as_secs() > heartbeat_timeout {
                                         debug!("Node heartbeat timeout: {}", node_id);
                                         nc_server.heartbeat_timeout(*node_id);
+                                        dead_nodes.push(*node_id);
                                     }
-                                }                
+                                }
+
+                                for node_id in dead_nodes {
+                                    connected_nodes.remove(&node_id);
+                                }
                             }
                             Err(e) => {
                                 error!("Error in start_server(), heartbeat loop: connected_nodes.lock(): {}", e);
@@ -184,7 +191,7 @@ async fn handle_node<T: NC_Server>(
                 }
                 NC_NodeMessage::HasData((node_id, new_data)) => {
                     debug!("New processed data received from node: {}", node_id);
-                    
+
                     if heartbeat_received(connected_nodes, node_id)? {
                         let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
