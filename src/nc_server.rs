@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{BufReader, BufWriter};
+use tokio::io::{BufReader, BufWriter, AsyncWriteExt};
 use tokio::time::{timeout, delay_for};
 use tokio::task;
 
@@ -83,7 +83,6 @@ async fn check_heartbeat<T: 'static + NC_Server + Send>(
                             }
                         }
                     }
-        
                 }
                 Err(e) => {
                     error!("Error in start_server(), heartbeat loop: nc_server.lock(): {}", e);
@@ -92,7 +91,6 @@ async fn check_heartbeat<T: 'static + NC_Server + Send>(
         }
     });
 }
-
 
 async fn main_loop<T: 'static + NC_Server + Send>(
         nc_server: Arc<Mutex<T>>,
@@ -109,7 +107,7 @@ async fn main_loop<T: 'static + NC_Server + Send>(
 
                 if let NC_JobStatus::Finished = job_status {
                     debug!("Job is finished!");
-                    // The last node has delivered tha last bit of data, so no more nodes will
+                    // The last node has delivered the last bit of data, so no more nodes will
                     // ever connect to the server again.
                     break
                 }
@@ -122,8 +120,8 @@ async fn main_loop<T: 'static + NC_Server + Send>(
         
                 tokio::spawn(async move {
                     match handle_node(nc_server, connected_nodes, stream, job_status).await {
-                        Ok(_) => debug!("handle node finished"),
-                        Err(e) => error!("handle node returned an error: {}", e),
+                        Ok(_) => debug!("handle_node() finished"),
+                        Err(e) => error!("handle_node() returned an error: {}", e),
                     }
                 });
             }
@@ -132,7 +130,6 @@ async fn main_loop<T: 'static + NC_Server + Send>(
                 return Err(NC_Error::TcpConnect(e))
             }
         }
-
     }
 
     Ok(())
@@ -151,7 +148,7 @@ async fn handle_node<T: NC_Server>(
     debug!("Receiving message from node");
     let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
 
-    debug!("handle_node: number of bytes read: {}", num_of_bytes_read);
+    debug!("handle_node(): number of bytes read: {}", num_of_bytes_read);
 
     match job_status {
         NC_JobStatus::Unfinished => {
@@ -182,11 +179,7 @@ async fn handle_node<T: NC_Server>(
                         debug!("New data sent to node, message_length: {}", message_length);    
                     } else {
                         // Node has to send heartbeat first
-                        debug!("Encoding message HeartBeatMissing");
-                        let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
-            
-                        debug!("Sending message to node");
-                        nc_send_message(&mut buf_writer, message).await?;
+                        heartbeat_missing(&mut buf_writer).await?;
                     }
                 }
                 NC_NodeMessage::HasData((node_id, new_data)) => {
@@ -202,15 +195,11 @@ async fn handle_node<T: NC_Server>(
                         })?
                     } else {
                         // Node has to send heartbeat first
-                        debug!("Encoding message HeartBeatMissing");
-                        let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
-            
-                        debug!("Sending message to node");
-                        nc_send_message(&mut buf_writer, message).await?;
+                        heartbeat_missing(&mut buf_writer).await?;
                     }
                 }
                 NC_NodeMessage::HeartBeat(node_id) => {
-                    debug!("Received heart beat from node: {}", node_id);
+                    debug!("Received heartbeat from node: {}", node_id);
 
                     let mut connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
                     connected_nodes.insert(node_id, Instant::now());
@@ -243,4 +232,12 @@ async fn handle_node<T: NC_Server>(
 fn heartbeat_received(connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>, node_id: u128) -> Result<bool, NC_Error> {
     let connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
     Ok(connected_nodes.contains_key(&node_id))
+}
+
+async fn heartbeat_missing<T: AsyncWriteExt + Unpin>(buf_writer: &mut T)  -> Result<(), NC_Error> {
+    debug!("Encoding message HeartBeatMissing");
+    let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
+
+    debug!("Sending message to node");
+    nc_send_message(buf_writer, message).await
 }
