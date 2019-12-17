@@ -115,9 +115,9 @@ async fn main_loop<T: 'static + NC_Server + Send>(
             Ok(Ok((stream, node))) => {
                 let nc_server = nc_server.clone();
                 let connected_nodes = connected_nodes.clone();
-        
+
                 debug!("Connection from: {}", node.to_string());
-        
+
                 tokio::spawn(async move {
                     match handle_node(nc_server, connected_nodes, stream, job_status).await {
                         Ok(_) => debug!("handle_node() finished"),
@@ -144,7 +144,7 @@ async fn handle_node<T: NC_Server>(
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
-    
+
     debug!("Receiving message from node");
     let (num_of_bytes_read, buffer) = nc_receive_message(&mut buf_reader).await?;
 
@@ -160,23 +160,23 @@ async fn handle_node<T: NC_Server>(
                     if heartbeat_received(connected_nodes, node_id)? {
                         let new_data = {
                             let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-        
+
                             debug!("Prepare new data for node");
                             task::block_in_place(move || {
                                 nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
                             })?
                             // Mutex for nc_storage needs to be dropped here
                             // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
-                        }; 
-        
+                        };
+
                         debug!("Encoding message HasData");
                         let message = nc_encode_data(&NC_ServerMessage::HasData(new_data))?;
                         let message_length = message.len() as u64;
-        
+
                         debug!("Sending message to node");
                         nc_send_message(&mut buf_writer, message).await?;
-            
-                        debug!("New data sent to node, message_length: {}", message_length);    
+
+                        debug!("New data sent to node, message_length: {}", message_length);
                     } else {
                         // Node has to send heartbeat first
                         heartbeat_missing(&mut buf_writer).await?;
@@ -204,7 +204,7 @@ async fn handle_node<T: NC_Server>(
                     let mut connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
                     connected_nodes.insert(node_id, Instant::now());
                 }
-            }        
+            }
         }
         NC_JobStatus::Waiting => {
             debug!("Encoding message Waiting");

@@ -38,14 +38,53 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) ->
 
     debug!("Current node id: {}", node_id);
 
+    send_heartbeat(&addr, config.heartbeat_timeout / 2, node_id).await?;
+    main_loop(&mut nc_node, &addr, config.reconnect_wait, node_id).await
+}
+
+async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -> Result<(), NC_Error> {
+    debug!("Connecting to server: {}", addr);
+    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
+
+    tokio::spawn(async move {
+        let (_, writer) = stream.split();
+        let mut buf_writer = BufWriter::new(writer);
+
+        loop {
+            debug!("Encoding message HeartBeat");
+            match nc_encode_data(&NC_NodeMessage::HeartBeat(node_id)) {
+                Ok(message) => {
+                    debug!("Sending message to server");
+                    match nc_send_message(&mut buf_writer, message).await {
+                        Ok(_) => {
+                            debug!("HeartBeat sent");
+                        }
+                        Err(e) => {
+                            error!("send_heartbeat(), nc_send_message(): an error occurred: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("send_heartbeat(), nc_encode_data(): an error occurred: {}", e);
+                }
+            }
+
+            delay_for(Duration::from_secs(heartbeat_time)).await;
+        }
+    });
+
+    Ok(())
+}
+
+async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wait: u64, node_id: u128) -> Result<(), NC_Error> {
     loop {
-        match node_worker(&mut nc_node, &addr, node_id).await {
+        match node_worker(nc_node, &addr, node_id).await {
             Ok(NC_JobStatus::Unfinished) => {
                 debug!("Job is not finished yet, back to work!");
             }
             Ok(NC_JobStatus::Waiting) => {
-                debug!("Retry in {} seconds", config.reconnect_wait);
-                delay_for(Duration::from_secs(config.reconnect_wait)).await;
+                debug!("Retry in {} seconds", reconnect_wait);
+                delay_for(Duration::from_secs(reconnect_wait)).await;
             }
             Ok(NC_JobStatus::Finished) => {
                 debug!("Job is finished, exit loop");
@@ -54,8 +93,8 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) ->
             Err(e) => {
                 error!("An error occurred: {}", e);
 
-                debug!("Retry in {} seconds", config.reconnect_wait);
-                delay_for(Duration::from_secs(config.reconnect_wait)).await;
+                debug!("Retry in {} seconds", reconnect_wait);
+                delay_for(Duration::from_secs(reconnect_wait)).await;
             }
         }
     }
