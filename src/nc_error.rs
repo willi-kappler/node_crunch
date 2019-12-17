@@ -41,7 +41,7 @@ impl fmt::Display for NC_Error {
             NC_Error::NodeProcess(e) => write!(f, "NodeProcess error: {}", e),
             NC_Error::ServerPrepare(e) => write!(f, "ServerPrepare error: {}", e),
             NC_Error::ServerProcess(e) => write!(f, "ServerProcess error: {}", e),
-        }        
+        }
     }
 }
 
