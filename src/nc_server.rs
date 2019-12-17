@@ -34,40 +34,44 @@ pub trait NC_Server {
 
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
     let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), config.port);
-    let mut socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
+    let socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
 
     let nc_server = Arc::new(Mutex::new(nc_server));
     let connected_nodes: Arc<Mutex<HashMap<u128, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    let heartbeat_timeout = config.heartbeat_timeout;
+    check_heartbeat(nc_server.clone(), connected_nodes.clone(), config.heartbeat_timeout).await;
 
-    let nc_server_local = nc_server.clone();
-    let connected_nodes_local = connected_nodes.clone();
+    main_loop(nc_server.clone(), connected_nodes.clone(), socket, config.server_timeout).await
+}
 
-    // Check heartbeat
+async fn check_heartbeat<T: 'static + NC_Server + Send>(
+        nc_server: Arc<Mutex<T>>,
+        connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
+        heartbeat_timeout: u64) {
+
     tokio::spawn(async move {
         loop {
             delay_for(Duration::from_secs(heartbeat_timeout)).await;
 
-            match nc_server_local.lock() {
-                Ok(mut nc_server_local) => {
-                    if let NC_JobStatus::Finished = nc_server_local.job_status() {
+            match nc_server.lock() {
+                Ok(mut nc_server) => {
+                    if let NC_JobStatus::Finished = nc_server.job_status() {
                         debug!("Exit heartbeat loop, job finished!");
                         break
                     } else {
-                        match connected_nodes_local.lock() {
-                            Ok(connected_nodes_local) => {
-                                for (node_id, heartbeat_time) in connected_nodes_local.iter() {
+                        match connected_nodes.lock() {
+                            Ok(connected_nodes) => {
+                                for (node_id, heartbeat_time) in connected_nodes.iter() {
                                     if heartbeat_time.elapsed().as_secs() > heartbeat_timeout {
                                         debug!("Node heartbeat timeout: {}", node_id);
-                                        nc_server_local.heartbeat_timeout(*node_id);
+                                        nc_server.heartbeat_timeout(*node_id);
                                     }
                                 }                
                             }
                             Err(e) => {
-                                error!("Error in start_server(), heartbeat loop: connected_nodes_local.lock(): {}", e);
+                                error!("Error in start_server(), heartbeat loop: connected_nodes.lock(): {}", e);
                             }
                         }
                     }
@@ -79,12 +83,19 @@ pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: N
             }
         }
     });
+}
 
-    // Main server loop
+
+async fn main_loop<T: 'static + NC_Server + Send>(
+        nc_server: Arc<Mutex<T>>,
+        connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
+        mut socket: TcpListener,
+        server_timeout: u64) -> Result<(), NC_Error> {
+
     loop {
         let job_status = nc_server.lock().map_err(|_| NC_Error::ServerLock)?.job_status();
 
-        match timeout(Duration::from_secs(config.server_timeout), socket.accept()).await {
+        match timeout(Duration::from_secs(server_timeout), socket.accept()).await {
             Err(_) => {
                 debug!("Received timeout");
 
@@ -119,10 +130,12 @@ pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: N
     Ok(())
 }
 
-async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>,
+async fn handle_node<T: NC_Server>(
+        nc_server: Arc<Mutex<T>>,
         connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
         mut stream: TcpStream,
         job_status: NC_JobStatus) -> Result<(), NC_Error> {
+
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
