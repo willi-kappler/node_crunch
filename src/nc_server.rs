@@ -23,6 +23,7 @@ pub enum NC_ServerMessage {
     HasData(Vec<u8>),
     Waiting,
     Finished,
+    HeartBeatMissing,
 }
 
 pub trait NC_Server {
@@ -151,35 +152,55 @@ async fn handle_node<T: NC_Server>(
             match nc_decode_data(&buffer)? {
                 NC_NodeMessage::NeedsData(node_id) => {
                     debug!("Node needs data: {}", node_id);
-                    let new_data = {
-                        let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
-    
-                        debug!("Prepare new data for node");
-                        task::block_in_place(move || {
-                            nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
-                        })?
-                        // Mutex for nc_storage needs to be dropped here
-                        // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
-                    }; 
-    
-                    debug!("Encoding message HasData");
-                    let message = nc_encode_data(&NC_ServerMessage::HasData(new_data))?;
-                    let message_length = message.len() as u64;
-    
-                    debug!("Sending message to node");
-                    nc_send_message(&mut buf_writer, message).await?;
+
+                    if heartbeat_received(connected_nodes, node_id)? {
+                        let new_data = {
+                            let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
         
-                    debug!("New data sent to node, message_length: {}", message_length);
+                            debug!("Prepare new data for node");
+                            task::block_in_place(move || {
+                                nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
+                            })?
+                            // Mutex for nc_storage needs to be dropped here
+                            // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
+                        }; 
+        
+                        debug!("Encoding message HasData");
+                        let message = nc_encode_data(&NC_ServerMessage::HasData(new_data))?;
+                        let message_length = message.len() as u64;
+        
+                        debug!("Sending message to node");
+                        nc_send_message(&mut buf_writer, message).await?;
+            
+                        debug!("New data sent to node, message_length: {}", message_length);    
+                    } else {
+                        // Node has to send heartbeat first
+                        debug!("Encoding message HeartBeatMissing");
+                        let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
+            
+                        debug!("Sending message to node");
+                        nc_send_message(&mut buf_writer, message).await?;
+                    }
                 }
                 NC_NodeMessage::HasData((node_id, new_data)) => {
                     debug!("New processed data received from node: {}", node_id);
-                    let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
+                    
+                    if heartbeat_received(connected_nodes, node_id)? {
+                        let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
-                    debug!("Processing data from node: {}", node_id);
-                    task::block_in_place(move || {
-                        nc_server.process_data_from_node(node_id, &new_data)
-                            .map_err(|e| NC_Error::ServerProcess(e))
-                    })?
+                        debug!("Processing data from node: {}", node_id);
+                        task::block_in_place(move || {
+                            nc_server.process_data_from_node(node_id, &new_data)
+                                .map_err(|e| NC_Error::ServerProcess(e))
+                        })?
+                    } else {
+                        // Node has to send heartbeat first
+                        debug!("Encoding message HeartBeatMissing");
+                        let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
+            
+                        debug!("Sending message to node");
+                        nc_send_message(&mut buf_writer, message).await?;
+                    }
                 }
                 NC_NodeMessage::HeartBeat(node_id) => {
                     debug!("Received heart beat from node: {}", node_id);
@@ -210,4 +231,9 @@ async fn handle_node<T: NC_Server>(
     }
 
     Ok(())
+}
+
+fn heartbeat_received(connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>, node_id: u128) -> Result<bool, NC_Error> {
+    let connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
+    Ok(connected_nodes.contains_key(&node_id))
 }

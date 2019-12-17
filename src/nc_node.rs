@@ -106,5 +106,9 @@ pub async fn node_worker<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, node_id
             debug!("Received Finished");
             Ok(NC_JobStatus::Finished)
         }
+        NC_ServerMessage::HeartBeatMissing => {
+            debug!("Heartbeat is missing from this node: {}", node_id);
+            Ok(NC_JobStatus::Waiting)
+        }
     }
 }
