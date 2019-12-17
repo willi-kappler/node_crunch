@@ -32,47 +32,57 @@ pub trait NC_Server {
     fn heartbeat_timeout(&mut self, node_id: u128);
 }
 
-struct NC_Storage<T> {
-    server: T,
-    nodes: HashMap<u128, Instant>,
-}
-
 pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
     let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), config.port);
     let mut socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
 
-    let nc_storage = Arc::new(Mutex::new(NC_Storage{ server: nc_server, nodes: HashMap::new() }));
+    let nc_server = Arc::new(Mutex::new(nc_server));
+    let connected_nodes: Arc<Mutex<HashMap<u128, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    let nc_storage_local = nc_storage.clone();
+    let heartbeat_timeout = config.heartbeat_timeout;
+
+    let nc_server_local = nc_server.clone();
+    let connected_nodes_local = connected_nodes.clone();
 
     // Check heartbeat
     tokio::spawn(async move {
         loop {
-            /*
-            delay_for(Duration::from_secs(config.heartbeat_timeout)).await;
-            
-            let nc_storage = &mut nc_storage_local.lock().unwrap();
+            delay_for(Duration::from_secs(heartbeat_timeout)).await;
 
-            if let NC_JobStatus::Finished = nc_storage.server.job_status() {
-                debug!("Exit heartbeat loop, job finished!");
-                break
-            } else {
-                for (node_id, heartbeat_time) in nc_storage.nodes {
-                    if heartbeat_time.elapsed().as_secs() > config.heartbeat_timeout {
-                        debug!("Node heartbeat timeout: {}", node_id);
-                        nc_storage.server.heartbeat_timeout(node_id);
+            match nc_server_local.lock() {
+                Ok(mut nc_server_local) => {
+                    if let NC_JobStatus::Finished = nc_server_local.job_status() {
+                        debug!("Exit heartbeat loop, job finished!");
+                        break
+                    } else {
+                        match connected_nodes_local.lock() {
+                            Ok(connected_nodes_local) => {
+                                for (node_id, heartbeat_time) in connected_nodes_local.iter() {
+                                    if heartbeat_time.elapsed().as_secs() > heartbeat_timeout {
+                                        debug!("Node heartbeat timeout: {}", node_id);
+                                        nc_server_local.heartbeat_timeout(*node_id);
+                                    }
+                                }                
+                            }
+                            Err(e) => {
+                                error!("Error in start_server(), heartbeat loop: connected_nodes_local.lock(): {}", e);
+                            }
+                        }
                     }
+        
+                }
+                Err(e) => {
+                    error!("Error in start_server(), heartbeat loop: nc_server.lock(): {}", e);
                 }
             }
-            */
         }
     });
 
     // Main server loop
     loop {
-        let job_status = nc_storage.lock().map_err(|_| NC_Error::StorageLock)?.server.job_status();
+        let job_status = nc_server.lock().map_err(|_| NC_Error::ServerLock)?.job_status();
 
         match timeout(Duration::from_secs(config.server_timeout), socket.accept()).await {
             Err(_) => {
@@ -86,12 +96,13 @@ pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: N
                 }
             }
             Ok(Ok((stream, node))) => {
-                let nc_storage_local = nc_storage.clone();
+                let nc_server = nc_server.clone();
+                let connected_nodes = connected_nodes.clone();
         
                 debug!("Connection from: {}", node.to_string());
         
                 tokio::spawn(async move {
-                    match handle_node(nc_storage_local, stream, job_status).await {
+                    match handle_node(nc_server, connected_nodes, stream, job_status).await {
                         Ok(_) => debug!("handle node finished"),
                         Err(e) => error!("handle node returned an error: {}", e),
                     }
@@ -108,7 +119,10 @@ pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: N
     Ok(())
 }
 
-async fn handle_node<T: NC_Server>(nc_storage: Arc<Mutex<NC_Storage<T>>>, mut stream: TcpStream, job_status: NC_JobStatus) -> Result<(), NC_Error> {
+async fn handle_node<T: NC_Server>(nc_server: Arc<Mutex<T>>,
+        connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
+        mut stream: TcpStream,
+        job_status: NC_JobStatus) -> Result<(), NC_Error> {
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
@@ -125,7 +139,7 @@ async fn handle_node<T: NC_Server>(nc_storage: Arc<Mutex<NC_Storage<T>>>, mut st
                 NC_NodeMessage::NeedsData(node_id) => {
                     debug!("Node needs data: {}", node_id);
                     let new_data = {
-                        let nc_server = &mut nc_storage.lock().map_err(|_| NC_Error::StorageLock)?.server;
+                        let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
     
                         debug!("Prepare new data for node");
                         task::block_in_place(move || {
@@ -146,7 +160,7 @@ async fn handle_node<T: NC_Server>(nc_storage: Arc<Mutex<NC_Storage<T>>>, mut st
                 }
                 NC_NodeMessage::HasData((node_id, new_data)) => {
                     debug!("New processed data received from node: {}", node_id);
-                    let nc_server = &mut nc_storage.lock().map_err(|_| NC_Error::StorageLock)?.server;
+                    let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
                     debug!("Processing data from node: {}", node_id);
                     task::block_in_place(move || {
@@ -157,8 +171,8 @@ async fn handle_node<T: NC_Server>(nc_storage: Arc<Mutex<NC_Storage<T>>>, mut st
                 NC_NodeMessage::HeartBeat(node_id) => {
                     debug!("Received heart beat from node: {}", node_id);
 
-                    let mut nc_storage = nc_storage.lock().map_err(|_| NC_Error::StorageLock)?;
-                    nc_storage.nodes.insert(node_id, Instant::now());
+                    let mut connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
+                    connected_nodes.insert(node_id, Instant::now());
                 }
             }        
         }
