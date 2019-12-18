@@ -44,28 +44,35 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) ->
 
 async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -> Result<(), NC_Error> {
     debug!("Connecting to server: {}", addr);
-    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
+    let addr = addr.clone();
 
     tokio::spawn(async move {
-        let (_, writer) = stream.split();
-        let mut buf_writer = BufWriter::new(writer);
-
         loop {
-            debug!("Encoding message HeartBeat");
-            match nc_encode_data(&NC_NodeMessage::HeartBeat(node_id)) {
-                Ok(message) => {
-                    debug!("Sending message to server");
-                    match nc_send_message(&mut buf_writer, message).await {
-                        Ok(_) => {
-                            debug!("HeartBeat sent");
+            match TcpStream::connect(&addr).await {
+                Ok(mut stream) => {
+                    let (_, writer) = stream.split();
+                    let mut buf_writer = BufWriter::new(writer);
+        
+                    debug!("Encoding message HeartBeat");
+                    match nc_encode_data(&NC_NodeMessage::HeartBeat(node_id)) {
+                        Ok(message) => {
+                            debug!("Sending message to server");
+                            match nc_send_message(&mut buf_writer, message).await {
+                                Ok(_) => {
+                                    debug!("HeartBeat sent");
+                                }
+                                Err(e) => {
+                                    error!("send_heartbeat(), nc_send_message(): an error occurred: {}", e);
+                                }
+                            }
                         }
                         Err(e) => {
-                            error!("send_heartbeat(), nc_send_message(): an error occurred: {}", e);
+                            error!("send_heartbeat(), nc_encode_data(): an error occurred: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    error!("send_heartbeat(), nc_encode_data(): an error occurred: {}", e);
+                    error!("send_heartbeat(), TcpStream::connect(): an error occurred: {}", e);
                 }
             }
 
