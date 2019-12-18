@@ -5,7 +5,8 @@
 // - Add TLS / encryption / secure connection
 // - Add authentication ?
 // - Add payload to NodeNeedsData() ?
-// - encode and decode may take time, use block_in_place
+// - Add error_counter, if too high exit both node and server
+
 
 
 mod nc_server;

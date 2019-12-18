@@ -162,10 +162,10 @@ async fn handle_node<T: NC_Server>(
                             let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
 
                             debug!("Prepare new data for node");
-                            task::block_in_place(move || {
+                            task::block_in_place(|| {
                                 nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
                             })?
-                            // Mutex for nc_storage needs to be dropped here
+                            // Mutex for nc_server needs to be dropped here
                             // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
                         };
 
