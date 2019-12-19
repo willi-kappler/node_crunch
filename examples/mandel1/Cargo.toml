@@ -10,10 +10,9 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 log = "0.4"
-log4rs = "0.8"
+log4rs = "0.9"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
-structopt = "0.2"
+structopt = "0.3"
 node_crunch = {path = "../../../node_crunch"}
 
 [profile.release]
