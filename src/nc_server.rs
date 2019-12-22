@@ -33,7 +33,7 @@ pub trait NC_Server {
     fn heartbeat_timeout(&mut self, node_id: u128);
 }
 
-pub async fn start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
+pub async fn nc_start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
     let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), config.port);
     let socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
 

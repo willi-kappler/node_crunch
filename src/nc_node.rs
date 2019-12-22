@@ -29,7 +29,7 @@ pub trait NC_Node {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
 }
 
-pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) -> Result<(), NC_Error> {
+pub async fn nc_start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) -> Result<(), NC_Error> {
     let addr = SocketAddr::new(config.address.parse().map_err(|e| NC_Error::IPAddr(e))?, config.port);
 
     let mut bytes = [0u8; 16];
@@ -52,7 +52,7 @@ async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -
                 Ok(mut stream) => {
                     let (_, writer) = stream.split();
                     let mut buf_writer = BufWriter::new(writer);
-        
+
                     debug!("Encoding message HeartBeat");
                     match nc_encode_data(&NC_NodeMessage::HeartBeat(node_id)) {
                         Ok(message) => {
@@ -92,7 +92,7 @@ async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wai
                 let processed_data = task::block_in_place(|| {
                     nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))
                 })?;
-    
+
                 match send_node_has_data(&addr, processed_data, node_id).await {
                     Ok(_) => {
                         debug!("Node has data sent");
@@ -127,7 +127,7 @@ async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wai
     Ok(())
 }
 
-pub async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NC_ServerMessage, NC_Error> {
+async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NC_ServerMessage, NC_Error> {
     debug!("Connecting to server: {}", addr);
     let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
     let (reader, writer) = stream.split();
@@ -148,7 +148,7 @@ pub async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NC
     nc_decode_data(&buffer)
 }
 
-pub async fn send_node_has_data(addr: &SocketAddr, processed_data: Vec<u8>, node_id: u128) -> Result<(), NC_Error> {
+async fn send_node_has_data(addr: &SocketAddr, processed_data: Vec<u8>, node_id: u128) -> Result<(), NC_Error> {
     debug!("Connecting to server: {}", addr);
     let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
     let (_, writer) = stream.split();

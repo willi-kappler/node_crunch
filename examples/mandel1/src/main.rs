@@ -4,12 +4,14 @@ use structopt::StructOpt;
 use log4rs;
 use tokio;
 
+// use node_crunch;
+
 mod server;
 mod node;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "simple1")]
-pub struct Simple1Opt {
+#[structopt(name = "mandel1")]
+pub struct Mandel1Opt {
     #[structopt(short = "s", long = "server")]
     server: bool,
 
@@ -35,13 +37,13 @@ fn create_logger(filename: &str) {
 
 #[tokio::main]
 async fn main() {
-    let options = Simple1Opt::from_args();
+    let options = Mandel1Opt::from_args();
 
     if options.server {
         create_logger("nc_server.log");
-        // server::run_server(options);
+        server::run_server(options).await;
     } else {
         create_logger("nc_node.log");
-        // node::run_node(options)
+        node::run_node(options).await
     }
 }
