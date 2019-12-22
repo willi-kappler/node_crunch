@@ -13,29 +13,29 @@ use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use crate::nc_error::{NC_Error};
-use crate::nc_node::{NC_NodeMessage};
-use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data, NC_JobStatus};
-use crate::nc_config::{NC_Configuration};
+use crate::nc_error::{NCError};
+use crate::nc_node::{NCNodeMessage};
+use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data, NCJobStatus};
+use crate::nc_config::{NCConfiguration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NC_ServerMessage {
+pub enum NCServerMessage {
     HasData(Vec<u8>),
     Waiting,
     Finished,
     HeartBeatMissing,
 }
 
-pub trait NC_Server {
+pub trait NCServer {
     fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
     fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), Box<dyn error::Error + Send>>;
-    fn job_status(&self) -> NC_JobStatus;
+    fn job_status(&self) -> NCJobStatus;
     fn heartbeat_timeout(&mut self, node_id: u128);
 }
 
-pub async fn nc_start_server<T: 'static + NC_Server + Send>(nc_server: T, config: NC_Configuration) -> Result<(), NC_Error> {
+pub async fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), config.port);
-    let socket = TcpListener::bind(addr).await.map_err(|e| NC_Error::TcpBind(e))?;
+    let socket = TcpListener::bind(addr).await.map_err(|e| NCError::TcpBind(e))?;
 
     debug!("Listening on: {}", addr);
 
@@ -47,7 +47,7 @@ pub async fn nc_start_server<T: 'static + NC_Server + Send>(nc_server: T, config
     main_loop(nc_server.clone(), connected_nodes.clone(), socket, config.server_timeout).await
 }
 
-async fn check_heartbeat<T: 'static + NC_Server + Send>(
+async fn check_heartbeat<T: 'static + NCServer + Send>(
         nc_server: Arc<Mutex<T>>,
         connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
         heartbeat_timeout: u64) {
@@ -58,7 +58,7 @@ async fn check_heartbeat<T: 'static + NC_Server + Send>(
 
             match nc_server.lock() {
                 Ok(mut nc_server) => {
-                    if let NC_JobStatus::Finished = nc_server.job_status() {
+                    if let NCJobStatus::Finished = nc_server.job_status() {
                         debug!("Exit heartbeat loop, job finished!");
                         break
                     } else {
@@ -92,20 +92,20 @@ async fn check_heartbeat<T: 'static + NC_Server + Send>(
     });
 }
 
-async fn main_loop<T: 'static + NC_Server + Send>(
+async fn main_loop<T: 'static + NCServer + Send>(
         nc_server: Arc<Mutex<T>>,
         connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
         mut socket: TcpListener,
-        server_timeout: u64) -> Result<(), NC_Error> {
+        server_timeout: u64) -> Result<(), NCError> {
 
     loop {
-        let job_status = nc_server.lock().map_err(|_| NC_Error::ServerLock)?.job_status();
+        let job_status = nc_server.lock().map_err(|_| NCError::ServerLock)?.job_status();
 
         match timeout(Duration::from_secs(server_timeout), socket.accept()).await {
             Err(_) => {
                 debug!("Received timeout");
 
-                if let NC_JobStatus::Finished = job_status {
+                if let NCJobStatus::Finished = job_status {
                     debug!("Job is finished!");
                     // The last node has delivered the last bit of data, so no more nodes will
                     // ever connect to the server again.
@@ -127,7 +127,7 @@ async fn main_loop<T: 'static + NC_Server + Send>(
             }
             Ok(Err(e)) => {
                 error!("Socket accept error: {}", e);
-                return Err(NC_Error::TcpConnect(e))
+                return Err(NCError::TcpConnect(e))
             }
         }
     }
@@ -135,11 +135,11 @@ async fn main_loop<T: 'static + NC_Server + Send>(
     Ok(())
 }
 
-async fn handle_node<T: NC_Server>(
+async fn handle_node<T: NCServer>(
         nc_server: Arc<Mutex<T>>,
         connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>,
         mut stream: TcpStream,
-        job_status: NC_JobStatus) -> Result<(), NC_Error> {
+        job_status: NCJobStatus) -> Result<(), NCError> {
 
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
@@ -151,26 +151,26 @@ async fn handle_node<T: NC_Server>(
     debug!("handle_node(): number of bytes read: {}", num_of_bytes_read);
 
     match job_status {
-        NC_JobStatus::Unfinished => {
+        NCJobStatus::Unfinished => {
             debug!("Decoding message");
             match nc_decode_data(&buffer)? {
-                NC_NodeMessage::NeedsData(node_id) => {
+                NCNodeMessage::NeedsData(node_id) => {
                     debug!("Node needs data: {}", node_id);
 
                     if heartbeat_received(connected_nodes, node_id)? {
                         let new_data = {
-                            let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
+                            let nc_server = &mut nc_server.lock().map_err(|_| NCError::ServerLock)?;
 
                             debug!("Prepare new data for node");
                             task::block_in_place(|| {
-                                nc_server.prepare_data_for_node(node_id).map_err(|e| NC_Error::ServerPrepare(e))
+                                nc_server.prepare_data_for_node(node_id).map_err(|e| NCError::ServerPrepare(e))
                             })?
                             // Mutex for nc_server needs to be dropped here
                             // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
                         };
 
                         debug!("Encoding message HasData");
-                        let message = nc_encode_data(&NC_ServerMessage::HasData(new_data))?;
+                        let message = nc_encode_data(&NCServerMessage::HasData(new_data))?;
                         let message_length = message.len() as u64;
 
                         debug!("Sending message to node");
@@ -182,42 +182,42 @@ async fn handle_node<T: NC_Server>(
                         heartbeat_missing(&mut buf_writer).await?;
                     }
                 }
-                NC_NodeMessage::HasData((node_id, new_data)) => {
+                NCNodeMessage::HasData((node_id, new_data)) => {
                     debug!("New processed data received from node: {}", node_id);
 
                     if heartbeat_received(connected_nodes, node_id)? {
-                        let nc_server = &mut nc_server.lock().map_err(|_| NC_Error::ServerLock)?;
+                        let nc_server = &mut nc_server.lock().map_err(|_| NCError::ServerLock)?;
 
                         debug!("Processing data from node: {}", node_id);
                         task::block_in_place(move || {
                             nc_server.process_data_from_node(node_id, &new_data)
-                                .map_err(|e| NC_Error::ServerProcess(e))
+                                .map_err(|e| NCError::ServerProcess(e))
                         })?
                     } else {
                         // Node has to send heartbeat first
                         heartbeat_missing(&mut buf_writer).await?;
                     }
                 }
-                NC_NodeMessage::HeartBeat(node_id) => {
+                NCNodeMessage::HeartBeat(node_id) => {
                     debug!("Received heartbeat from node: {}", node_id);
 
-                    let mut connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
+                    let mut connected_nodes = connected_nodes.lock().map_err(|_| NCError::NodesLock)?;
                     connected_nodes.insert(node_id, Instant::now());
                 }
             }
         }
-        NC_JobStatus::Waiting => {
+        NCJobStatus::Waiting => {
             debug!("Encoding message Waiting");
-            let message = nc_encode_data(&NC_ServerMessage::Waiting)?;
+            let message = nc_encode_data(&NCServerMessage::Waiting)?;
 
             debug!("Sending message to node");
             nc_send_message(&mut buf_writer, message).await?;
 
             debug!("Waiting for other nodes to finish");
         }
-        NC_JobStatus::Finished => {
+        NCJobStatus::Finished => {
             debug!("Encoding message Finished");
-            let message = nc_encode_data(&NC_ServerMessage::Finished)?;
+            let message = nc_encode_data(&NCServerMessage::Finished)?;
 
             debug!("Sending message to node");
             nc_send_message(&mut buf_writer, message).await?;
@@ -229,14 +229,14 @@ async fn handle_node<T: NC_Server>(
     Ok(())
 }
 
-fn heartbeat_received(connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>, node_id: u128) -> Result<bool, NC_Error> {
-    let connected_nodes = connected_nodes.lock().map_err(|_| NC_Error::NodesLock)?;
+fn heartbeat_received(connected_nodes: Arc<Mutex<HashMap<u128, Instant>>>, node_id: u128) -> Result<bool, NCError> {
+    let connected_nodes = connected_nodes.lock().map_err(|_| NCError::NodesLock)?;
     Ok(connected_nodes.contains_key(&node_id))
 }
 
-async fn heartbeat_missing<T: AsyncWriteExt + Unpin>(buf_writer: &mut T)  -> Result<(), NC_Error> {
+async fn heartbeat_missing<T: AsyncWriteExt + Unpin>(buf_writer: &mut T)  -> Result<(), NCError> {
     debug!("Encoding message HeartBeatMissing");
-    let message = nc_encode_data(&NC_ServerMessage::HeartBeatMissing)?;
+    let message = nc_encode_data(&NCServerMessage::HeartBeatMissing)?;
 
     debug!("Sending message to node");
     nc_send_message(buf_writer, message).await

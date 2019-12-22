@@ -3,7 +3,7 @@ use std::{error, fmt, io, net};
 use bincode;
 
 #[derive(Debug)]
-pub enum NC_Error {
+pub enum NCError {
     IPAddr(net::AddrParseError),
     TcpBind(io::Error),
     TcpConnect(io::Error),
@@ -22,48 +22,48 @@ pub enum NC_Error {
     ServerProcess(Box<dyn error::Error + Send>),
 }
 
-impl fmt::Display for NC_Error {
+impl fmt::Display for NCError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NC_Error::IPAddr(e) => write!(f, "IPAddr error: {}", e),
-            NC_Error::TcpBind(e) => write!(f, "TcpBind error: {}", e),
-            NC_Error::TcpConnect(e) => write!(f, "TcpConnect error: {}", e),
-            NC_Error::SocketAccept(e) => write!(f, "SocketAccept error: {}", e),
-            NC_Error::ReadU64(e) => write!(f, "ReadU64 error: {}", e),
-            NC_Error::ReadBuffer(e) => write!(f, "ReadBuffer error: {}", e),
-            NC_Error::QuitLock => write!(f, "QuitLock error"),
-            NC_Error::ServerLock => write!(f, "ServerLock error"),
-            NC_Error::NodesLock => write!(f, "NodesLock error"),
-            NC_Error::WriteU64(e) => write!(f, "WriteU64 error: {}", e),
-            NC_Error::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
-            NC_Error::Serialize(e) => write!(f, "Serialize error: {}", e),
-            NC_Error::Deserialize(e) => write!(f, "Deserialize error: {}", e),
-            NC_Error::NodeProcess(e) => write!(f, "NodeProcess error: {}", e),
-            NC_Error::ServerPrepare(e) => write!(f, "ServerPrepare error: {}", e),
-            NC_Error::ServerProcess(e) => write!(f, "ServerProcess error: {}", e),
+            NCError::IPAddr(e) => write!(f, "IPAddr error: {}", e),
+            NCError::TcpBind(e) => write!(f, "TcpBind error: {}", e),
+            NCError::TcpConnect(e) => write!(f, "TcpConnect error: {}", e),
+            NCError::SocketAccept(e) => write!(f, "SocketAccept error: {}", e),
+            NCError::ReadU64(e) => write!(f, "ReadU64 error: {}", e),
+            NCError::ReadBuffer(e) => write!(f, "ReadBuffer error: {}", e),
+            NCError::QuitLock => write!(f, "QuitLock error"),
+            NCError::ServerLock => write!(f, "ServerLock error"),
+            NCError::NodesLock => write!(f, "NodesLock error"),
+            NCError::WriteU64(e) => write!(f, "WriteU64 error: {}", e),
+            NCError::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
+            NCError::Serialize(e) => write!(f, "Serialize error: {}", e),
+            NCError::Deserialize(e) => write!(f, "Deserialize error: {}", e),
+            NCError::NodeProcess(e) => write!(f, "NodeProcess error: {}", e),
+            NCError::ServerPrepare(e) => write!(f, "ServerPrepare error: {}", e),
+            NCError::ServerProcess(e) => write!(f, "ServerProcess error: {}", e),
         }
     }
 }
 
-impl error::Error for NC_Error {
+impl error::Error for NCError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            NC_Error::IPAddr(e) => Some(e),
-            NC_Error::TcpBind(e) => Some(e),
-            NC_Error::TcpConnect(e) => Some(e),
-            NC_Error::SocketAccept(e) => Some(e),
-            NC_Error::ReadU64(e) => Some(e),
-            NC_Error::ReadBuffer(e) => Some(e),
-            NC_Error::QuitLock => None,
-            NC_Error::ServerLock => None,
-            NC_Error::NodesLock => None,
-            NC_Error::WriteU64(e) => Some(e),
-            NC_Error::WriteBuffer(e) => Some(e),
-            NC_Error::Serialize(e) => Some(e),
-            NC_Error::Deserialize(e) => Some(e),
-            NC_Error::NodeProcess(_e) => None, // Some(e) doesn't work
-            NC_Error::ServerPrepare(_e) => None, // Some(e) doesn't work
-            NC_Error::ServerProcess(_e) => None, // Some(e) doesn't work
+            NCError::IPAddr(e) => Some(e),
+            NCError::TcpBind(e) => Some(e),
+            NCError::TcpConnect(e) => Some(e),
+            NCError::SocketAccept(e) => Some(e),
+            NCError::ReadU64(e) => Some(e),
+            NCError::ReadBuffer(e) => Some(e),
+            NCError::QuitLock => None,
+            NCError::ServerLock => None,
+            NCError::NodesLock => None,
+            NCError::WriteU64(e) => Some(e),
+            NCError::WriteBuffer(e) => Some(e),
+            NCError::Serialize(e) => Some(e),
+            NCError::Deserialize(e) => Some(e),
+            NCError::NodeProcess(_e) => None, // Some(e) doesn't work
+            NCError::ServerPrepare(_e) => None, // Some(e) doesn't work
+            NCError::ServerProcess(_e) => None, // Some(e) doesn't work
         }
     }
 }

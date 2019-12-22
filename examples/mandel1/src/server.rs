@@ -2,7 +2,7 @@ use std::error;
 
 use log::{info, error};
 
-use node_crunch::{NC_Server, nc_start_server, NC_Configuration, NC_JobStatus};
+use node_crunch::{NCServer, nc_start_server, NCConfiguration, NCJobStatus};
 
 use crate::Mandel1Opt;
 
@@ -10,7 +10,7 @@ struct MandelServer {
 
 }
 
-impl NC_Server for MandelServer {
+impl NCServer for MandelServer {
     fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, Box<dyn error::Error + Send>> {
         let mut result = Vec::new();
 
@@ -25,9 +25,9 @@ impl NC_Server for MandelServer {
         Ok(())
     }
 
-    fn job_status(&self) -> NC_JobStatus {
+    fn job_status(&self) -> NCJobStatus {
         // TODO:
-        NC_JobStatus::Unfinished
+        NCJobStatus::Unfinished
     }
 
     fn heartbeat_timeout(&mut self, node_id: u128) {
@@ -36,7 +36,7 @@ impl NC_Server for MandelServer {
 }
 
 pub async fn run_server(options: Mandel1Opt) {
-    let configuration = NC_Configuration {
+    let configuration = NCConfiguration {
         port: options.port,
         ..Default::default()
     };
