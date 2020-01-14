@@ -13,24 +13,24 @@ use serde::{Serialize, Deserialize};
 
 use rand::{self, Rng};
 
-use crate::nc_error::{NC_Error};
-use crate::nc_server::{NC_ServerMessage};
+use crate::nc_error::{NCError};
+use crate::nc_server::{NCServerMessage};
 use crate::nc_util::{nc_send_message, nc_receive_message, nc_encode_data, nc_decode_data};
-use crate::nc_config::{NC_Configuration};
+use crate::nc_config::{NCConfiguration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NC_NodeMessage {
+pub enum NCNodeMessage {
     NeedsData(u128),
     HasData((u128, Vec<u8>)),
     HeartBeat(u128),
 }
 
-pub trait NC_Node {
+pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
 }
 
-pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) -> Result<(), NC_Error> {
-    let addr = SocketAddr::new(config.address.parse().map_err(|e| NC_Error::IPAddr(e))?, config.port);
+pub async fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
+    let addr = SocketAddr::new(config.address.parse().map_err(|e| NCError::IPAddr(e))?, config.port);
 
     let mut bytes = [0u8; 16];
     rand::thread_rng().fill(&mut bytes[..]);
@@ -42,7 +42,7 @@ pub async fn start_node<T: NC_Node>(mut nc_node: T, config: NC_Configuration) ->
     main_loop(&mut nc_node, &addr, config.reconnect_wait, node_id).await
 }
 
-async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -> Result<(), NC_Error> {
+async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -> Result<(), NCError> {
     debug!("Connecting to server: {}", addr);
     let addr = addr.clone();
 
@@ -52,9 +52,9 @@ async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -
                 Ok(mut stream) => {
                     let (_, writer) = stream.split();
                     let mut buf_writer = BufWriter::new(writer);
-        
+
                     debug!("Encoding message HeartBeat");
-                    match nc_encode_data(&NC_NodeMessage::HeartBeat(node_id)) {
+                    match nc_encode_data(&NCNodeMessage::HeartBeat(node_id)) {
                         Ok(message) => {
                             debug!("Sending message to server");
                             match nc_send_message(&mut buf_writer, message).await {
@@ -83,16 +83,16 @@ async fn send_heartbeat(addr: &SocketAddr, heartbeat_time: u64, node_id: u128) -
     Ok(())
 }
 
-async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wait: u64, node_id: u128) -> Result<(), NC_Error> {
+async fn main_loop<T: NCNode>(nc_node: &mut T, addr: &SocketAddr, reconnect_wait: u64, node_id: u128) -> Result<(), NCError> {
     loop {
         match send_node_needs_data(&addr, node_id).await {
-            Ok(NC_ServerMessage::HasData(data)) => {
+            Ok(NCServerMessage::HasData(data)) => {
                 debug!("Received HasData");
                 debug!("Processing data...");
                 let processed_data = task::block_in_place(|| {
-                    nc_node.process_data_from_server(data).map_err(|e| NC_Error::NodeProcess(e))
+                    nc_node.process_data_from_server(data).map_err(|e| NCError::NodeProcess(e))
                 })?;
-    
+
                 match send_node_has_data(&addr, processed_data, node_id).await {
                     Ok(_) => {
                         debug!("Node has data sent");
@@ -103,15 +103,15 @@ async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wai
                     }
                 }
             }
-            Ok(NC_ServerMessage::Waiting) => {
+            Ok(NCServerMessage::Waiting) => {
                 debug!("Retry in {} seconds", reconnect_wait);
                 delay_for(Duration::from_secs(reconnect_wait)).await;
             }
-            Ok(NC_ServerMessage::Finished) => {
+            Ok(NCServerMessage::Finished) => {
                 debug!("Job is finished, exit loop");
                 break
             }
-            Ok(NC_ServerMessage::HeartBeatMissing) => {
+            Ok(NCServerMessage::HeartBeatMissing) => {
                 debug!("Heartbeat is missing from this node: {}", node_id);
                 delay_for(Duration::from_secs(reconnect_wait)).await;
             }
@@ -127,15 +127,15 @@ async fn main_loop<T: NC_Node>(nc_node: &mut T, addr: &SocketAddr, reconnect_wai
     Ok(())
 }
 
-pub async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NC_ServerMessage, NC_Error> {
+async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NCServerMessage, NCError> {
     debug!("Connecting to server: {}", addr);
-    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
+    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NCError::TcpConnect(e))?;
     let (reader, writer) = stream.split();
     let mut buf_reader = BufReader::new(reader);
     let mut buf_writer = BufWriter::new(writer);
 
     debug!("Encoding message NeedsData");
-    let message = nc_encode_data(&NC_NodeMessage::NeedsData(node_id))?;
+    let message = nc_encode_data(&NCNodeMessage::NeedsData(node_id))?;
 
     debug!("Sending message to server");
     nc_send_message(&mut buf_writer, message).await?;
@@ -148,14 +148,14 @@ pub async fn send_node_needs_data(addr: &SocketAddr, node_id: u128) -> Result<NC
     nc_decode_data(&buffer)
 }
 
-pub async fn send_node_has_data(addr: &SocketAddr, processed_data: Vec<u8>, node_id: u128) -> Result<(), NC_Error> {
+async fn send_node_has_data(addr: &SocketAddr, processed_data: Vec<u8>, node_id: u128) -> Result<(), NCError> {
     debug!("Connecting to server: {}", addr);
-    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NC_Error::TcpConnect(e))?;
+    let mut stream = TcpStream::connect(&addr).await.map_err(|e| NCError::TcpConnect(e))?;
     let (_, writer) = stream.split();
     let mut buf_writer = BufWriter::new(writer);
 
     debug!("Encoding message HasData");
-    let message = nc_encode_data(&NC_NodeMessage::HasData((node_id, processed_data)))?;
+    let message = nc_encode_data(&NCNodeMessage::HasData((node_id, processed_data)))?;
 
     debug!("Send message back to server");
     nc_send_message(&mut buf_writer, message).await
