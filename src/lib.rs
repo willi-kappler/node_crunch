@@ -6,7 +6,7 @@
 // - Add authentication ?
 // - Add payload to NodeNeedsData() ?
 // - Add error_counter, if too high exit both node and server
-
+// - Speed up serde: https://github.com/serde-rs/bytes
 
 
 mod nc_server;
