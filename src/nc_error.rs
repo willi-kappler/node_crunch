@@ -17,9 +17,6 @@ pub enum NCError {
     WriteBuffer(io::Error),
     Serialize(bincode::Error),
     Deserialize(bincode::Error),
-    NodeProcess(Box<dyn error::Error + Send>),
-    ServerPrepare(Box<dyn error::Error + Send>),
-    ServerProcess(Box<dyn error::Error + Send>),
 }
 
 impl fmt::Display for NCError {
@@ -38,9 +35,6 @@ impl fmt::Display for NCError {
             NCError::WriteBuffer(e) => write!(f, "WriteBuffer error: {}", e),
             NCError::Serialize(e) => write!(f, "Serialize error: {}", e),
             NCError::Deserialize(e) => write!(f, "Deserialize error: {}", e),
-            NCError::NodeProcess(e) => write!(f, "NodeProcess error: {}", e),
-            NCError::ServerPrepare(e) => write!(f, "ServerPrepare error: {}", e),
-            NCError::ServerProcess(e) => write!(f, "ServerProcess error: {}", e),
         }
     }
 }
@@ -61,9 +55,6 @@ impl error::Error for NCError {
             NCError::WriteBuffer(e) => Some(e),
             NCError::Serialize(e) => Some(e),
             NCError::Deserialize(e) => Some(e),
-            NCError::NodeProcess(_e) => None, // Some(e) doesn't work
-            NCError::ServerPrepare(_e) => None, // Some(e) doesn't work
-            NCError::ServerProcess(_e) => None, // Some(e) doesn't work
         }
     }
 }

@@ -1,5 +1,4 @@
 use std::time::Duration;
-use std::error;
 use std::net::{SocketAddr};
 
 use tokio::net::TcpStream;
@@ -26,7 +25,7 @@ pub enum NCNodeMessage {
 }
 
 pub trait NCNode {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Vec<u8>;
 }
 
 pub async fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
@@ -89,9 +88,7 @@ async fn main_loop<T: NCNode>(nc_node: &mut T, addr: &SocketAddr, reconnect_wait
             Ok(NCServerMessage::HasData(data)) => {
                 debug!("Received HasData");
                 debug!("Processing data...");
-                let processed_data = task::block_in_place(|| {
-                    nc_node.process_data_from_server(data).map_err(|e| NCError::NodeProcess(e))
-                })?;
+                let processed_data = task::block_in_place(|| { nc_node.process_data_from_server(data) });
 
                 match send_node_has_data(&addr, processed_data, node_id).await {
                     Ok(_) => {

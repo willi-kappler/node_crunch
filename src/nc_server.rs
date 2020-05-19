@@ -1,5 +1,4 @@
 use std::sync::{Arc, Mutex};
-use std::error;
 use std::net::{SocketAddr};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
@@ -27,8 +26,8 @@ pub enum NCServerMessage {
 }
 
 pub trait NCServer {
-    fn prepare_data_for_node(&mut self, node_id: u128) -> Result<Vec<u8>, Box<dyn error::Error + Send>>;
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) -> Result<(), Box<dyn error::Error + Send>>;
+    fn prepare_data_for_node(&mut self, node_id: u128) -> Vec<u8>;
+    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>);
     fn job_status(&self) -> NCJobStatus;
     fn heartbeat_timeout(&mut self, node_id: u128);
 }
@@ -162,9 +161,7 @@ async fn handle_node<T: NCServer>(
                             let nc_server = &mut nc_server.lock().map_err(|_| NCError::ServerLock)?;
 
                             debug!("Prepare new data for node");
-                            task::block_in_place(|| {
-                                nc_server.prepare_data_for_node(node_id).map_err(|e| NCError::ServerPrepare(e))
-                            })?
+                            task::block_in_place(|| { nc_server.prepare_data_for_node(node_id) })
                             // Mutex for nc_server needs to be dropped here
                             // See https://rust-lang.github.io/async-book/07_workarounds/04_send_approximation.html
                         };
@@ -189,10 +186,7 @@ async fn handle_node<T: NCServer>(
                         let nc_server = &mut nc_server.lock().map_err(|_| NCError::ServerLock)?;
 
                         debug!("Processing data from node: {}", node_id);
-                        task::block_in_place(move || {
-                            nc_server.process_data_from_node(node_id, &new_data)
-                                .map_err(|e| NCError::ServerProcess(e))
-                        })?
+                        task::block_in_place(move || { nc_server.process_data_from_node(node_id, &new_data) })
                     } else {
                         // Node has to send heartbeat first
                         heartbeat_missing(&mut buf_writer).await?;

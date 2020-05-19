@@ -3,6 +3,7 @@
 use structopt::StructOpt;
 use log4rs;
 use tokio;
+use serde::{Serialize, Deserialize};
 
 // use node_crunch;
 
@@ -20,6 +21,23 @@ pub struct Mandel1Opt {
 
     #[structopt(short = "p", long = "port", default_value = "2020")]
     port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerData {
+    img_size: u32,
+    max_iter: u32,
+    x_step: f64,
+    y: u32,
+    y_step: f64,
+    re: f64,
+    im: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeData {
+    y: u32,
+    line: Vec<u32>,
 }
 
 fn create_logger(filename: &str) {
