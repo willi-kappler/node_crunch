@@ -20,10 +20,9 @@ pub(crate) enum NCNodeMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NCNodeInfo {
-    hostname: String,
-    IP: String,
-
+pub(crate) struct NCNodeInfo {
+    pub(crate) hostname: String,
+    pub(crate) IP: String,
 }
 
 #[derive(Debug)]
@@ -34,15 +33,14 @@ enum NCNodeEvent {
 }
 
 pub trait NCNode {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Option<Vec<u8>>;
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Option<Vec<u8>>; // TODO: Use Result<>
 }
 
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
-
-    let server_endpoint = network.connect_tcp(&config.address)?;
+    let server_endpoint = network.connect_tcp(&config.address)?; // TODO: Port is missing!
 
     let node_address = network.local_address(server_endpoint.resource_id());
 
@@ -62,12 +60,15 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                     NetEvent::Message(_, server_msg) => {
                         match server_msg {
                             NCServerMessage::AssignNodeID(id) => {
+                                info!("New node id assigned: {}", id);
                                 nc_node_id = id;
                                 network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id))?;
                             }
                             NCServerMessage::HasData(data) => {
+                                info!("Received raw data from server, ready to process...");
                                 match nc_node.process_data_from_server(data) {
                                     Some(data) => {
+                                        debug!("Data has been processed successfully, sending to server...");
                                         network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data))?;
                                     }
                                     None => {
@@ -80,11 +81,16 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                             NCServerMessage::Waiting => {
                                 // Server is still waiting for other nodes to complete but
                                 // it doesn't have any work for us to do now.
+                                info!("Server is waiting for other nodes to finish...");
+                                debug!("Will retry in {} seconds", config.delay_request_data);
                                 event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
                             }
                             NCServerMessage::Finished => {
                                 info!("Server is done, exit now");
                                 break;
+                            }
+                            NCServerMessage::Error(e) => {
+                                error!("Server has encountered an error: {}, will retry in {} seconds", e, config.delay_request_data);
                             }
                         }
                     }
