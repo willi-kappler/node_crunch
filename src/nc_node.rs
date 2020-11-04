@@ -4,8 +4,6 @@ use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use rand::{self, Rng};
-
 use message_io::events::{EventQueue};
 use message_io::network::{NetworkManager, NetEvent};
 
@@ -32,6 +30,7 @@ pub struct NCNodeInfo {
 enum NCNodeEvent {
     InMsg(NetEvent<NCServerMessage>),
     Heartbeat,
+    DelayRequestData,
 }
 
 pub trait NCNode {
@@ -79,29 +78,34 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
                             }
                             NCServerMessage::Waiting => {
-                                // TODO: Server is still waiting for other nodes to complete but
+                                // Server is still waiting for other nodes to complete but
                                 // it doesn't have any work for us to do now.
-                                todo!();
+                                event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
                             }
                             NCServerMessage::Finished => {
-                                // TODO: try reconnect
                                 info!("Server is done, exit now");
                                 break;
                             }
                         }
                     }
                     NetEvent::RemovedEndpoint(_) => {
-                        info!("Connection to server lost. Exit now");
+                        // TODO: Try reconnect
+                        error!("Connection to server lost. Exit now");
                         break;
                     }
                     NetEvent::AddedEndpoint(_) => {
-                        error!("Received 'AddedEndpoint' message from server. This should not happen!");
+                        error!("Received 'AddedEndpoint' message. This should not happen!");
                     }
                 }
             }
             NCNodeEvent::Heartbeat => {
+                debug!("Send hearbeat to server");
                 network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id))?;
                 event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
+            }
+            NCNodeEvent::DelayRequestData => {
+                debug!("Delay request data");
+                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id))?;
             }
         }
     }

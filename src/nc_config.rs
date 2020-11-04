@@ -7,6 +7,7 @@ pub struct NCConfiguration{
     // pub reconnect_wait: u64,
     // pub server_timeout: u64,
     pub heartbeat: u64,
+    pub delay_request_data: u64,
 }
 
 impl Default for NCConfiguration {
@@ -17,6 +18,7 @@ impl Default for NCConfiguration {
             // reconnect_wait: 10,
             // server_timeout: 60 * 10,
             heartbeat: 60,
+            delay_request_data: 60,
         }
     }
 }
