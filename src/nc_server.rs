@@ -5,19 +5,28 @@ use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
 
+use message_io::events::{EventQueue};
+use message_io::network::{NetworkManager, NetEvent};
+
 use crate::nc_error::{NCError};
 use crate::nc_node::{NCNodeMessage};
 use crate::nc_config::{NCConfiguration};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NCServerMessage {
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NCServerMessage {
+    AssignNodeID(u128),
     HasData(Vec<u8>),
     Waiting,
     Finished,
-    HeartBeatMissing,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug)]
+enum NCServerEvent {
+    InMsg(NetEvent<NCNodeMessage>),
+    CheckHearbeat,
+}
+
+#[derive(Debug)]
 pub enum NCJobStatus {
     Unfinished,
     Waiting,
@@ -31,6 +40,6 @@ pub trait NCServer {
     fn heartbeat_timeout(&mut self, node_id: u128);
 }
 
-pub async fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
+pub fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     Ok(())
 }
