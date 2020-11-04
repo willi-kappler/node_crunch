@@ -8,11 +8,10 @@ categories = ["Network programming", "Science"]
 edition = "2018"
 
 [dependencies]
-tokio = { version = "0.2", features = ["full"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
 rand = "0.7"
+message-io = "0.4"
 
 [profile.release]
 lto = true
