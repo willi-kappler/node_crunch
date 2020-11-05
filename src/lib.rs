@@ -10,6 +10,7 @@
 
 mod nc_server;
 mod nc_node;
+mod nc_node_info;
 mod nc_error;
 mod nc_config;
 

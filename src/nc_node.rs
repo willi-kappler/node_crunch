@@ -13,16 +13,10 @@ use crate::nc_config::{NCConfiguration};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCNodeMessage {
-    Register(NCNodeInfo),
-    NeedsData(u128),
-    HasData(u128, Vec<u8>),
-    HeartBeat(u128),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct NCNodeInfo {
-    pub(crate) hostname: String,
-    pub(crate) IP: String,
+    Register(String),
+    NeedsData(u64),
+    HasData(u64, Vec<u8>),
+    HeartBeat(u64),
 }
 
 #[derive(Debug)]
@@ -32,6 +26,7 @@ enum NCNodeEvent {
     DelayRequestData,
 }
 
+// TODO: Generic trait, U for data in, V for data out
 pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Option<Vec<u8>>; // TODO: Use Result<>
 }
@@ -40,18 +35,17 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
-    let server_endpoint = network.connect_tcp(&config.address)?; // TODO: Port is missing!
+    let server_endpoint = network.connect_tcp((&config.address as &str, config.port))?;
 
     let node_address = network.local_address(server_endpoint.resource_id());
 
     info!("Connected to server: {}", &config.address);
 
-    // TODO: Get hostname and IP address of node
-    let node_info = NCNodeInfo{ hostname: "TODO".to_string(), IP: "TODO".to_string() };
     event_queue.sender().send(NCNodeEvent::Heartbeat);
-    network.send(server_endpoint, NCNodeMessage::Register(node_info))?;
+    // TODO: Get hostname
+    network.send(server_endpoint, NCNodeMessage::Register("hostname".to_string()))?;
 
-    let mut nc_node_id: u128 = 0;
+    let mut nc_node_id: u64 = 0;
 
     loop {
         match event_queue.receive() {
@@ -91,6 +85,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                             }
                             NCServerMessage::Error(e) => {
                                 error!("Server has encountered an error: {}, will retry in {} seconds", e, config.delay_request_data);
+                                event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
                             }
                         }
                     }

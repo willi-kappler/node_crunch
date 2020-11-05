@@ -1,20 +1,22 @@
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
+use std::time::{Duration};
 
 use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
+use rand::{random};
+
 use message_io::events::{EventQueue};
-use message_io::network::{NetworkManager, NetEvent};
+use message_io::network::{NetworkManager, NetEvent, Endpoint};
 
 use crate::nc_error::{NCError};
 use crate::nc_node::{NCNodeMessage};
 use crate::nc_config::{NCConfiguration};
+use crate::nc_node_info::{NCNodeInfo};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage {
-    AssignNodeID(u128),
+    AssignNodeID(u64),
     HasData(Vec<u8>),
     Waiting,
     Finished,
@@ -36,21 +38,22 @@ pub enum NCJobStatus {
 }
 
 pub trait NCServer {
-    fn prepare_data_for_node(&mut self, node_id: u128) -> Option<Vec<u8>>; // TODO: Use Result<>
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>); // TODO: Use Result<>
+    fn prepare_data_for_node(&mut self, node_id: u64) -> Option<Vec<u8>>; // TODO: Use Result<>
+    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>); // TODO: Use Result<>
     fn job_status(&self) -> NCJobStatus;
-    fn heartbeat_timeout(&mut self, node_id: u128);
+    fn heartbeat_timeout(&mut self, node_id: u64);
 }
 
 pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCServerEvent::InMsg(net_event)));
-    network.listen_tcp(config.address)?; // TODO: Port is missing!
+    network.listen_tcp((config.address, config.port))?;
 
     event_queue.sender().send(NCServerEvent::CheckHeartbeat);
+    event_queue.sender().send(NCServerEvent::CheckJobStatus);
 
-    let mut all_node_ids: Vec<u128> = Vec::new();
+    let mut all_nodes: Vec<NCNodeInfo> = Vec::new();
 
     loop {
         match event_queue.receive() {
@@ -58,19 +61,23 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                 match msg1 {
                     NetEvent::Message(endpoint, msg2) =>  {
                         match msg2 {
-                            NCNodeMessage::Register(node_info) => {
-                                info!("Registering new node: {}, {}", node_info.hostname, node_info.IP);
+                            NCNodeMessage::Register(hostname) => {
+                                info!("Registering new node: {}, {}", hostname, endpoint.addr());
+                                let node_id = get_new_node_id(&all_nodes);
+                                let node_info = NCNodeInfo::new(node_id, endpoint, hostname);
+                                all_nodes.push(node_info);
+
                             }
                             NCNodeMessage::NeedsData(node_id) => {
                                 debug!("Node {} needs data to process", node_id);
                                 match nc_server.prepare_data_for_node(node_id) {
                                     Some(data) => {
                                         debug!("Sending data to node: {}", node_id);
-                                        network.send(endpoint, NCServerMessage::HasData(data));
+                                        network.send(endpoint, NCServerMessage::HasData(data))?;
                                     }
                                     None => {
                                         error!("An error occurred while preparing the data for the node: {}", node_id);
-                                        network.send(endpoint, NCServerMessage::Error(1));
+                                        network.send(endpoint, NCServerMessage::Error(1))?;
                                     }
                                 }
                             }
@@ -79,37 +86,40 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                 nc_server.process_data_from_node(node_id, &data);
                             }
                             NCNodeMessage::HeartBeat(node_id) => {
-                                // TODO: save new time stamp for node_id
+                                update_heartbeat(&mut all_nodes, node_id);
                             }
                         }
                     }
                     NetEvent::AddedEndpoint(endpoint) => {
-                        info!("New client connected: {}", endpoint.addr());
-                        // TODO: Add new node in node list
+                        info!("New node connected: {}", endpoint.addr());
                     }
                     NetEvent::RemovedEndpoint(endpoint) => {
-                        error!("Client has disconnected: {}", endpoint.addr());
-                        // TODO: remove node from node list
+                        error!("Node has disconnected: {}", endpoint.addr());
+                        remove_node(&mut all_nodes, endpoint);
                     }
                 }
             }
             NCServerEvent::CheckHeartbeat => {
-                // TODO: Go through list of all clients and check if each heartbeat was sent within the limits
+                check_heartbeat(&all_nodes, config.heartbeat, &mut nc_server);
                 event_queue.sender().send_with_timer(NCServerEvent::CheckHeartbeat, Duration::from_secs(config.heartbeat * 2));
             }
             NCServerEvent::CheckJobStatus => {
                 match nc_server.job_status() {
                     NCJobStatus::Unfinished => {
-                        info!("Job is not done yet...");
+                        debug!("Job is not done yet...");
                         // Nothing to do...
                     }
                     NCJobStatus::Waiting => {
-                        info!("Mostly done, waiting for nodes to finish...");
-                        // network.send_all(endpoints, NCServerMessage::Waiting);
+                        debug!("Mostly done, waiting for nodes to finish...");
+                        let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
+                        // TODO: check Vec of results
+                        network.send_all(endpoints, NCServerMessage::Waiting);
                     }
                     NCJobStatus::Finished => {
                         info!("Job is done!, Will exit now");
-                        // network.send_all(endpoints, NCServerMessage::Finished);
+                        let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
+                        // TODO: check Vec of results
+                        network.send_all(endpoints, NCServerMessage::Finished);
                         break;
                     }
                 };
@@ -120,4 +130,41 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
     }
 
     Ok(())
+}
+
+fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> u64 {
+    let mut new_id: u64 = random();
+
+    'l1: loop {
+        for node_info in all_nodes.iter() {
+            if node_info.node_id == new_id {
+                new_id = random();
+                continue 'l1
+            }
+        }
+
+        break
+    }
+
+    new_id
+}
+
+fn update_heartbeat(all_nodes: &mut Vec<NCNodeInfo>, node_id: u64) {
+    for node_info in all_nodes.iter_mut() {
+        if node_info.node_id == node_id {
+            node_info.update_heartbeat();
+        }
+    }
+}
+
+fn remove_node(all_nodes: &mut Vec<NCNodeInfo>, endpoint: Endpoint) {
+    all_nodes.retain(|node_info| node_info.endpoint != endpoint);
+}
+
+fn check_heartbeat<T: NCServer>(all_nodes: &Vec<NCNodeInfo>, limit: u64, nc_server: &mut T) {
+    for node_info in all_nodes.iter() {
+        if node_info.heartbeat_invalid(limit) {
+            nc_server.heartbeat_timeout(node_info.node_id);
+        }
+    }
 }
