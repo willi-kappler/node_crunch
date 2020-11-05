@@ -56,20 +56,27 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                             NCServerMessage::AssignNodeID(id) => {
                                 info!("New node id assigned: {}", id);
                                 nc_node_id = id;
-                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id))?;
+                                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
+                                    error!("Could not send NeedsData message to server");
+                                }
                             }
                             NCServerMessage::HasData(data) => {
                                 info!("Received raw data from server, ready to process...");
                                 match nc_node.process_data_from_server(data) {
                                     Some(data) => {
                                         debug!("Data has been processed successfully, sending to server...");
-                                        network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data))?;
+                                        if network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data)).is_err() {
+                                            error!("Could not send HasData message to server");
+                                        }
                                     }
                                     None => {
                                         error!("Data from server could not be processed properly, requesting new data");
+                                        // TODO: send messge to server that data could not be processed
                                     }
                                 };
-                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id))?;
+                                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
+                                    error!("Could not send NeedsData message to server");
+                                }
 
                             }
                             NCServerMessage::Waiting => {
@@ -83,8 +90,8 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                                 info!("Server is done, exit now");
                                 break;
                             }
-                            NCServerMessage::Error(e) => {
-                                error!("Server has encountered an error: {}, will retry in {} seconds", e, config.delay_request_data);
+                            NCServerMessage::PrepareDataError => {
+                                error!("Server has sent a PrepareDataError, will retry in {} seconds", config.delay_request_data);
                                 event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
                             }
                         }
@@ -101,12 +108,16 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
             }
             NCNodeEvent::Heartbeat => {
                 debug!("Send hearbeat to server");
-                network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id))?;
+                if network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id)).is_err() {
+                    error!("Could not send HearBeat message to server");
+                }
                 event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
             }
             NCNodeEvent::DelayRequestData => {
                 debug!("Delay request data");
-                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id))?;
+                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
+                    error!("Could not send delayed NeedsData message to server");
+                }
             }
         }
     }
