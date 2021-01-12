@@ -2,7 +2,6 @@
 
 use structopt::StructOpt;
 use log4rs;
-use tokio;
 use serde::{Serialize, Deserialize};
 
 // use node_crunch;
@@ -53,15 +52,14 @@ fn create_logger(filename: &str) {
     let _log_handle = log4rs::init_config(config).unwrap();
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let options = Mandel1Opt::from_args();
 
     if options.server {
         create_logger("nc_server.log");
-        server::run_server(options).await;
+        server::run_server(options);
     } else {
         create_logger("nc_node.log");
-        node::run_node(options).await
+        node::run_node(options)
     }
 }

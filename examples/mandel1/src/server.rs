@@ -2,14 +2,14 @@ use log::{info, error, debug};
 use num::{complex::Complex64};
 // use serde::{Serialize, Deserialize};
 
-use node_crunch::{NCServer, nc_start_server, NCConfiguration, NCJobStatus, nc_encode_data, nc_decode_data};
+use node_crunch::{NCServer, NCJobStatus, NCConfiguration, nc_start_server};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
 #[derive(Debug, Clone, PartialEq)]
 enum MandelData {
     Empty,
-    Processing(u128),
+    Processing(u64),
     Finished(Vec<u32>),
 }
 
@@ -25,7 +25,7 @@ struct MandelServer {
 }
 
 impl NCServer for MandelServer {
-    fn prepare_data_for_node(&mut self, node_id: u128) -> Vec<u8> {
+    fn prepare_data_for_node(&mut self, node_id: u64) -> Option<Vec<u8>> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         for y in 0..self.img_size {
@@ -43,7 +43,7 @@ impl NCServer for MandelServer {
                 match nc_encode_data(&output) {
                     Ok(data) => {
                         self.data[y as usize] = MandelData::Processing(node_id);
-                        return data
+                        return Some(data)
                     },
                     Err(e) => {
                         error!("An error occurred while preparing the data for the Node: {}, error: {}", node_id, e);
@@ -51,10 +51,10 @@ impl NCServer for MandelServer {
                 }
             }
         }
-        return Vec::new()
+        None
     }
 
-    fn process_data_from_node(&mut self, node_id: u128, data: &Vec<u8>) {
+    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
         match nc_decode_data::<NodeData>(data) {
@@ -96,7 +96,7 @@ impl NCServer for MandelServer {
         }
     }
 
-    fn heartbeat_timeout(&mut self, node_id: u128) {
+    fn heartbeat_timeout(&mut self, node_id: u64) {
         info!("Heartbeat timeout, node_id: {}", node_id);
 
         for i in 0..self.img_size {
@@ -108,7 +108,7 @@ impl NCServer for MandelServer {
     }
 }
 
-pub async fn run_server(options: Mandel1Opt) {
+pub fn run_server(options: Mandel1Opt) {
     let configuration = NCConfiguration {
         port: options.port,
         ..Default::default()
@@ -131,7 +131,7 @@ pub async fn run_server(options: Mandel1Opt) {
         data: vec![MandelData::Empty; img_size as usize],
     };
 
-    match nc_start_server(node, configuration).await {
+    match nc_start_server(node, configuration) {
         Ok(_) => {
             info!("Calculation finished");
         }

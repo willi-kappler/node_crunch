@@ -2,7 +2,7 @@ use log::{info, error};
 use num::{complex::Complex64};
 // use serde::{Serialize, Deserialize};
 
-use node_crunch::{NCNode, NCError, nc_start_node, NCConfiguration, nc_encode_data, nc_decode_data};
+use node_crunch::{NCNode, NCError, NCConfiguration, nc_start_node};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -36,18 +36,18 @@ fn handle_data(data: Vec<u8>) -> Result<Vec<u8>, NCError> {
 }
 
 impl NCNode for MandelNode {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Vec<u8> {
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Option<Vec<u8>> {
         match handle_data(data) {
-            Ok(result) => result,
+            Ok(result) => Some(result),
             Err(e) => {
                 error!("An error occurred while processing the data from the server: {}", e);
-                Vec::new()
+                None
             }
         }
     }
 }
 
-pub async fn run_node(options: Mandel1Opt) {
+pub fn run_node(options: Mandel1Opt) {
     let configuration = NCConfiguration {
         port: options.port,
         address: options.ip,
@@ -56,7 +56,7 @@ pub async fn run_node(options: Mandel1Opt) {
 
     let node = MandelNode{};
 
-    match nc_start_node(node, configuration).await {
+    match nc_start_node(node, configuration) {
         Ok(_) => {
             info!("Calculation finished");
         }

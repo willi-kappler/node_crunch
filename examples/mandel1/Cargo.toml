@@ -8,7 +8,6 @@ categories = ["Network programming", "Science"]
 edition = "2018"
 
 [dependencies]
-tokio = { version = "0.2", features = ["full"] }
 log = "0.4"
 log4rs = "0.11"
 serde = { version = "1", features = ["derive"] }
