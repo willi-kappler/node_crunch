@@ -2,7 +2,7 @@ use log::{info, error, debug};
 use num::{complex::Complex64};
 // use serde::{Serialize, Deserialize};
 
-use node_crunch::{NCServer, NCJobStatus, NCConfiguration, nc_start_server};
+use node_crunch::{NCServer, NCJobStatus, NCConfiguration, nc_start_server, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -91,7 +91,6 @@ impl NCServer for MandelServer {
         } else if processing > 0 {
             NCJobStatus::Waiting
         } else {
-
             NCJobStatus::Finished
         }
     }

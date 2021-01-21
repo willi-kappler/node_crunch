@@ -126,7 +126,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                         // TODO: check Vec of results
                         if let Err(errors) = network.send_all(endpoints, NCServerMessage::Waiting) {
                             for (endpoint, error) in errors.iter() {
-                                error!("Error while sending Waiting message to node: {}", endpoint.addr());
+                                error!("Error while sending Waiting message to node: {}, error: {}", endpoint.addr(), error);
                             }
                         }
                     }
@@ -136,7 +136,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                         // TODO: check Vec of results
                         if let Err(errors) = network.send_all(endpoints, NCServerMessage::Finished) {
                             for (endpoint, error) in errors.iter() {
-                                error!("Error while sending Finished message to node: {}", endpoint.addr());
+                                error!("Error while sending Finished message to node: {}, error: {}", endpoint.addr(), error);
                             }
                         }
                         break;

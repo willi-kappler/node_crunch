@@ -2,7 +2,7 @@ use log::{info, error};
 use num::{complex::Complex64};
 // use serde::{Serialize, Deserialize};
 
-use node_crunch::{NCNode, NCError, NCConfiguration, nc_start_node};
+use node_crunch::{NCNode, NCError, NCConfiguration, nc_start_node, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 

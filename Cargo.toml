@@ -10,6 +10,7 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+bincode = "1"
 rand = "0.7"
 message-io = "0.4"
 
