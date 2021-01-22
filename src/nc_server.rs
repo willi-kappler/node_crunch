@@ -79,9 +79,13 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                 debug!("Node {} needs data to process", node_id);
                                 match nc_server.prepare_data_for_node(node_id) {
                                     Some(data) => {
-                                        debug!("Sending data to node: {}", node_id);
-                                        if network.send(endpoint, NCServerMessage::HasData(data)).is_err() {
-                                            error!("Error while sending HasData message to node: {}, {}", node_id, socket_addr);
+                                        if data.len() > 0 {
+                                            debug!("Sending data to node: {}", node_id);
+                                            if network.send(endpoint, NCServerMessage::HasData(data)).is_err() {
+                                                error!("Error while sending HasData message to node: {}, {}", node_id, socket_addr);
+                                            }
+                                        } else {
+                                            debug!("No more data to send, job seems to be finished");
                                         }
                                     }
                                     None => {

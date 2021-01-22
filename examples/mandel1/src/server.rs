@@ -24,12 +24,34 @@ struct MandelServer {
     data: Vec<MandelData>,
 }
 
+impl MandelServer {
+    fn set_empty(&mut self, y: u32) {
+        self.data[y as usize] = MandelData::Empty
+    }
+
+    fn is_empty(&self, y: u32) -> bool {
+        self.data[y as usize] == MandelData::Empty
+    }
+
+    fn set_processing(&mut self, y: u32, node_id: u64) {
+        self.data[y as usize] = MandelData::Processing(node_id)
+    }
+
+    fn is_processing(&self, y: u32, node_id: u64) -> bool {
+        self.data[y as usize] == MandelData::Processing(node_id)
+    }
+
+    fn set_finished(&mut self, y: u32, line: Vec<u32>) {
+        self.data[y as usize] = MandelData::Finished(line)
+    }
+}
+
 impl NCServer for MandelServer {
     fn prepare_data_for_node(&mut self, node_id: u64) -> Option<Vec<u8>> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         for y in 0..self.img_size {
-            if self.data[y as usize] == MandelData::Empty {
+            if self.is_empty(y) {
                 let output = ServerData {
                     img_size: self.img_size,
                     max_iter: self.max_iter,
@@ -42,16 +64,18 @@ impl NCServer for MandelServer {
 
                 match nc_encode_data(&output) {
                     Ok(data) => {
-                        self.data[y as usize] = MandelData::Processing(node_id);
+                        self.set_processing(y, node_id);
+                        debug!("preparing line {} for node {}", y, node_id);
                         return Some(data)
                     },
                     Err(e) => {
                         error!("An error occurred while preparing the data for the Node: {}, error: {}", node_id, e);
+                        return None
                     },
                 }
             }
         }
-        None
+        return Some(Vec::new())
     }
 
     fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) {
@@ -59,8 +83,8 @@ impl NCServer for MandelServer {
 
         match nc_decode_data::<NodeData>(data) {
             Ok(data) => {
-                if self.data[data.y as usize] == MandelData::Processing(node_id) {
-                    self.data[data.y as usize] = MandelData::Finished(data.line)
+                if self.is_processing(data.y, node_id) {
+                    self.set_finished(data.y, data.line)
                 } else {
                     error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, self.data[data.y as usize])
                 }
@@ -99,9 +123,9 @@ impl NCServer for MandelServer {
         info!("Heartbeat timeout, node_id: {}", node_id);
 
         for i in 0..self.img_size {
-            if self.data[i as usize] == MandelData::Processing(node_id) {
+            if self.is_processing(i, node_id) {
                 // Since the node is no longer responding, set data[i] as empty for other nodes to process
-                self.data[i as usize] = MandelData::Empty
+                self.set_empty(i)
             }
         }
     }
