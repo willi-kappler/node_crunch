@@ -2,7 +2,7 @@ use log::{info, error, debug};
 use num::{complex::Complex64};
 // use serde::{Serialize, Deserialize};
 
-use node_crunch::{NCServer, NCJobStatus, NCConfiguration, nc_start_server, nc_decode_data, nc_encode_data};
+use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError, nc_start_server, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -47,7 +47,7 @@ impl MandelServer {
 }
 
 impl NCServer for MandelServer {
-    fn prepare_data_for_node(&mut self, node_id: u64) -> Option<Vec<u8>> {
+    fn prepare_data_for_node(&mut self, node_id: u64) -> Result<Option<Vec<u8>>, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         for y in 0..self.img_size {
@@ -66,31 +66,34 @@ impl NCServer for MandelServer {
                     Ok(data) => {
                         self.set_processing(y, node_id);
                         debug!("preparing line {} for node {}", y, node_id);
-                        return Some(data)
+                        return Ok(Some(data))
                     },
                     Err(e) => {
                         error!("An error occurred while preparing the data for the Node: {}, error: {}", node_id, e);
-                        return None
+                        return Err(e)
                     },
                 }
             }
         }
-        return Some(Vec::new())
+        return Ok(None)
     }
 
-    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) {
+    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
         match nc_decode_data::<NodeData>(data) {
             Ok(data) => {
                 if self.is_processing(data.y, node_id) {
-                    self.set_finished(data.y, data.line)
+                    self.set_finished(data.y, data.line);
+                    Ok(())
                 } else {
-                    error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, self.data[data.y as usize])
+                    error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, self.data[data.y as usize]);
+                    Err(NCError::Custom(1))
                 }
             },
             Err(e) => {
-                error!("An error occurred while processing the data from the Node: {}", e)
+                error!("An error occurred while processing the data from the Node: {}", e);
+                Err(e)
             }
         }
     }

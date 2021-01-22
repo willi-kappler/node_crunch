@@ -28,7 +28,7 @@ enum NCNodeEvent {
 
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCNode {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Option<Vec<u8>>; // TODO: Use Result<>
+    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
 }
 
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
@@ -63,21 +63,21 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                             NCServerMessage::HasData(data) => {
                                 info!("Received raw data from server, ready to process...");
                                 match nc_node.process_data_from_server(data) {
-                                    Some(data) => {
+                                    Ok(data) => {
                                         debug!("Data has been processed successfully, sending to server...");
                                         if network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data)).is_err() {
                                             error!("Could not send HasData message to server");
                                         }
                                     }
-                                    None => {
-                                        error!("Data from server could not be processed properly, requesting new data");
+                                    Err(e) => {
+                                        error!("Data from server could not be processed properly: {}", e);
+                                        info!("Requesting new data");
                                         // TODO: send messge to server that data could not be processed
                                     }
                                 };
                                 if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
                                     error!("Could not send NeedsData message to server");
                                 }
-
                             }
                             NCServerMessage::Waiting => {
                                 // Server is still waiting for other nodes to complete but

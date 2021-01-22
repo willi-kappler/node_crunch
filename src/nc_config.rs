@@ -18,9 +18,9 @@ impl Default for NCConfiguration {
             port: 9000,
             // reconnect_wait: 10,
             // server_timeout: 60 * 10,
-            heartbeat: 60,
+            heartbeat: 60, // Check every n seconds
             delay_request_data: 60,
-            job_status: 60,
+            job_status: 60, // Check every n seconds
         }
     }
 }

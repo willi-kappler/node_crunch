@@ -7,6 +7,7 @@ pub enum NCError {
     IOError(io::Error),
     Serialize(bincode::Error),
     Deserialize(bincode::Error),
+    Custom(u32),
 }
 
 impl fmt::Display for NCError {
@@ -15,6 +16,7 @@ impl fmt::Display for NCError {
             NCError::IOError(e) => write!(f, "IOError: {}", e),
             NCError::Serialize(e) => write!(f, "Serialize bincode error: {}", e),
             NCError::Deserialize(e) => write!(f, "Deserialize bincode error: {}", e),
+            NCError::Custom(e) => write!(f, "Custom user defined error: {}", e),
         }
     }
 }
@@ -25,6 +27,7 @@ impl error::Error for NCError {
             NCError::IOError(e) => Some(e),
             NCError::Serialize(e) => Some(e),
             NCError::Deserialize(e) => Some(e),
+            NCError::Custom(_) => Some(self),
         }
     }
 }

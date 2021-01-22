@@ -39,8 +39,8 @@ pub enum NCJobStatus {
 
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCServer {
-    fn prepare_data_for_node(&mut self, node_id: u64) -> Option<Vec<u8>>; // TODO: Use Result<>
-    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>); // TODO: Use Result<>
+    fn prepare_data_for_node(&mut self, node_id: u64) -> Result<Option<Vec<u8>>, NCError>;
+    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) -> Result<(), NCError>;
     fn job_status(&self) -> NCJobStatus;
     fn heartbeat_timeout(&mut self, node_id: u64);
 }
@@ -78,18 +78,17 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                             NCNodeMessage::NeedsData(node_id) => {
                                 debug!("Node {} needs data to process", node_id);
                                 match nc_server.prepare_data_for_node(node_id) {
-                                    Some(data) => {
-                                        if data.len() > 0 {
-                                            debug!("Sending data to node: {}", node_id);
-                                            if network.send(endpoint, NCServerMessage::HasData(data)).is_err() {
-                                                error!("Error while sending HasData message to node: {}, {}", node_id, socket_addr);
-                                            }
-                                        } else {
-                                            debug!("No more data to send, job seems to be finished");
+                                    Ok(Some(data)) => {
+                                        debug!("Sending data to node: {}", node_id);
+                                        if network.send(endpoint, NCServerMessage::HasData(data)).is_err() {
+                                            error!("Error while sending HasData message to node: {}, {}", node_id, socket_addr);
                                         }
                                     }
-                                    None => {
-                                        error!("An error occurred while preparing the data for the node: {}", node_id);
+                                    Ok(None) => {
+                                        debug!("No more data to send, job seems to be finished");
+                                    }
+                                    Err(e) => {
+                                        error!("An error occurred while preparing the data for the node: {}, error: {}", node_id, e);
                                         if network.send(endpoint, NCServerMessage::PrepareDataError).is_err() {
                                             error!("Error while sending Error message to node: {}, {}", node_id, socket_addr);
                                         }
@@ -98,7 +97,14 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                             }
                             NCNodeMessage::HasData(node_id, data) => {
                                 debug!("Node {} has processed some data and we received the results", node_id);
-                                nc_server.process_data_from_node(node_id, &data);
+                                match nc_server.process_data_from_node(node_id, &data) {
+                                    Ok(_) => {
+                                        debug!("Processing data from node done, no errors.");
+                                    }
+                                    Err(e) => {
+                                        error!("Could not process data from node, error: {}", e);
+                                    }
+                                }
                             }
                             NCNodeMessage::HeartBeat(node_id) => {
                                 update_heartbeat(&mut all_nodes, node_id);
@@ -122,12 +128,11 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                 match nc_server.job_status() {
                     NCJobStatus::Unfinished => {
                         debug!("Job is not done yet...");
-                        // Nothing to do...
+                        // Nothing else to do...
                     }
                     NCJobStatus::Waiting => {
                         debug!("Mostly done, waiting for nodes to finish...");
                         let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
-                        // TODO: check Vec of results
                         if let Err(errors) = network.send_all(endpoints, NCServerMessage::Waiting) {
                             for (endpoint, error) in errors.iter() {
                                 error!("Error while sending Waiting message to node: {}, error: {}", endpoint.addr(), error);
@@ -137,7 +142,6 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                     NCJobStatus::Finished => {
                         info!("Job is done!, Will exit now");
                         let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
-                        // TODO: check Vec of results
                         if let Err(errors) = network.send_all(endpoints, NCServerMessage::Finished) {
                             for (endpoint, error) in errors.iter() {
                                 error!("Error while sending Finished message to node: {}, error: {}", endpoint.addr(), error);
