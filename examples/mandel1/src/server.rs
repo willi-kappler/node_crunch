@@ -44,6 +44,10 @@ impl MandelServer {
     fn set_finished(&mut self, y: u32, line: Vec<u32>) {
         self.data[y as usize] = MandelData::Finished(line)
     }
+
+    fn save_image(&self) {
+        // TODO: save mandelbrot image
+    }
 }
 
 impl NCServer for MandelServer {
@@ -147,7 +151,7 @@ pub fn run_server(options: Mandel1Opt) {
     let x_step = (end.re - start.re) / (img_size as f64);
     let y_step = (end.im - start.im) / (img_size as f64);
 
-    let node = MandelServer {
+    let server = MandelServer {
         start,
         end,
         x_step,
@@ -157,9 +161,10 @@ pub fn run_server(options: Mandel1Opt) {
         data: vec![MandelData::Empty; img_size as usize],
     };
 
-    match nc_start_server(node, configuration) {
-        Ok(_) => {
+    match nc_start_server(server, configuration) {
+        Ok(server) => {
             info!("Calculation finished");
+            server.save_image();
         }
         Err(e) => {
             error!("An error occurred: {}", e);

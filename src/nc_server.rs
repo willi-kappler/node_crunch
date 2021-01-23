@@ -45,7 +45,7 @@ pub trait NCServer {
     fn heartbeat_timeout(&mut self, node_id: u64);
 }
 
-pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
+pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<T, NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCServerEvent::InMsg(net_event)));
@@ -156,7 +156,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
         }
     }
 
-    Ok(())
+    Ok(nc_server)
 }
 
 fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> u64 {
