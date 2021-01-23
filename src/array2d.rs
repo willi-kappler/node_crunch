@@ -1,4 +1,8 @@
 
+
+pub enum Array2DError {
+    DimensionMismatch,
+}
 pub struct Array2D<T> {
     width: u64,
     height: u64,
@@ -66,7 +70,11 @@ impl<T: Clone + Copy> Array2DChunk<T> {
         }
     }
 
-    fn get_chunk_pos(&self, chunk_id: u64) -> (u64, u64, u64, u64) {
+    pub fn num_of_chunks(&self) -> u64 {
+        self.chunks_x * self.chunks_y
+    }
+
+    pub fn get_chunk_property(&self, chunk_id: u64) -> (u64, u64, u64, u64) {
         let cy = chunk_id / self.chunks_x;
         let cx = chunk_id - (cy * self.chunks_x);
 
@@ -76,17 +84,14 @@ impl<T: Clone + Copy> Array2DChunk<T> {
         (cx * self.chunk_width, cy * self.chunk_height, width, height)
     }
 
-    pub fn set_chunk(&mut self, chunk_id: u64, source: &Array2D<T>) {
-        let (x, y, width, height) = self.get_chunk_pos(chunk_id);
+    pub fn set_chunk(&mut self, chunk_id: u64, source: &Array2D<T>) -> Result<(), Array2DError> {
+        let (x, y, width, height) = self.get_chunk_property(chunk_id);
 
         if (width == source.width) && (height == source.height) {
             self.array2d.set_region(x, y, source);
+            Ok(())
         } else {
-
+            Err(Array2DError::DimensionMismatch)
         }
-    }
-
-    pub fn num_of_chunks(&self) -> u64 {
-        self.chunks_x * self.chunks_y
     }
 }
