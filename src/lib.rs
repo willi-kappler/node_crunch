@@ -14,9 +14,11 @@ mod nc_node_info;
 mod nc_error;
 mod nc_config;
 mod nc_util;
+mod array2d;
 
 pub use nc_server::{NCServer, NCJobStatus, nc_start_server};
 pub use nc_node::{NCNode, nc_start_node};
 pub use nc_error::NCError;
 pub use nc_config::{NCConfiguration};
 pub use nc_util::{nc_decode_data, nc_encode_data};
+pub use array2d::{Array2D, Array2DChunk};
