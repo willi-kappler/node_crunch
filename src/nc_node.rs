@@ -37,7 +37,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
     let server_endpoint = network.connect_tcp((&config.address as &str, config.port))?;
 
-    let node_address = network.local_address(server_endpoint.resource_id());
+    // let node_address = network.local_address(server_endpoint.resource_id());
 
     info!("Connected to server: {}", &config.address);
 

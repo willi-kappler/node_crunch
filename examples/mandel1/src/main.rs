@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use log4rs;
 use serde::{Serialize, Deserialize};
 
-// use node_crunch;
+use node_crunch::{Array2D};
 
 mod server;
 mod node;
@@ -24,10 +24,13 @@ pub struct Mandel1Opt {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerData {
-    img_size: u32,
+    chunk_id: u64,
     max_iter: u32,
+    x: u64,
+    y: u64,
+    width: u64,
+    height: u64,
     x_step: f64,
-    y: u32,
     y_step: f64,
     re: f64,
     im: f64,
@@ -35,8 +38,8 @@ pub struct ServerData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeData {
-    y: u32,
-    line: Vec<u32>,
+    chunk_id: u64,
+    source: Array2D::<u32>,
 }
 
 fn create_logger(filename: &str) {

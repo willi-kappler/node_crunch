@@ -1,8 +1,9 @@
-
+use serde::{Serialize, Deserialize};
 
 pub enum Array2DError {
     DimensionMismatch,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Array2D<T> {
     width: u64,
     height: u64,
@@ -40,6 +41,7 @@ impl<T: Clone + Copy> Array2D<T> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Array2DChunk<T> {
     chunk_width: u64,
     chunk_height: u64,
