@@ -51,8 +51,8 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
     let mut network = NetworkManager::new(move |net_event| network_sender.send(NCServerEvent::InMsg(net_event)));
     network.listen_tcp((config.address, config.port))?;
 
-    event_queue.sender().send(NCServerEvent::CheckHeartbeat);
-    event_queue.sender().send(NCServerEvent::CheckJobStatus);
+    event_queue.sender().send_with_timer(NCServerEvent::CheckHeartbeat, Duration::from_secs(config.heartbeat * 2));
+    event_queue.sender().send_with_timer(NCServerEvent::CheckJobStatus, Duration::from_secs(config.job_status));
 
     let mut all_nodes: Vec<NCNodeInfo> = Vec::new();
 
@@ -85,7 +85,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                         }
                                     }
                                     Ok(None) => {
-                                        debug!("No more data to send, job seems to be finished");
+                                        debug!("No more data to send, waiting for other nodes to finish");
                                     }
                                     Err(e) => {
                                         error!("An error occurred while preparing the data for the node: {}, error: {}", node_id, e);
@@ -107,6 +107,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                 }
                             }
                             NCNodeMessage::HeartBeat(node_id) => {
+                                debug!("Got hearbeat from node: {}", node_id);
                                 update_heartbeat(&mut all_nodes, node_id);
                             }
                         }
@@ -121,6 +122,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                 }
             }
             NCServerEvent::CheckHeartbeat => {
+                debug!("Check heartbeat for all nodes (limit: {})", config.heartbeat);
                 check_heartbeat(&all_nodes, config.heartbeat, &mut nc_server);
                 event_queue.sender().send_with_timer(NCServerEvent::CheckHeartbeat, Duration::from_secs(config.heartbeat * 2));
             }

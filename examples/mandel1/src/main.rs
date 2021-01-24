@@ -1,5 +1,6 @@
 
 
+use std::fs;
 use structopt::StructOpt;
 use log4rs;
 use serde::{Serialize, Deserialize};
@@ -62,7 +63,20 @@ fn main() {
         create_logger("nc_server.log");
         server::run_server(options);
     } else {
-        create_logger("nc_node.log");
+        let mut postfix: u64 = 1;
+        let mut filename = format!("nc_node_{:08}.log", postfix);
+
+        loop {
+            if fs::metadata(&filename).is_ok() {
+                // Filename for logging already exists, try another one...
+                postfix += 1;
+                filename = format!("nc_node_{:08}.log", postfix);
+            } else {
+                break
+            }
+        }
+
+        create_logger(&filename);
         node::run_node(options)
     }
 }

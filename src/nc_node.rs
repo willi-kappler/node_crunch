@@ -41,7 +41,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     info!("Connected to server: {}", &config.address);
 
-    event_queue.sender().send(NCNodeEvent::Heartbeat);
+    event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
     // TODO: Get hostname
     network.send(server_endpoint, NCNodeMessage::Register("hostname".to_string()))?;
 

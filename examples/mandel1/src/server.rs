@@ -66,14 +66,11 @@ impl MandelServer {
 
         for (x, y, pixel) in buffer.enumerate_pixels_mut() {
             let value = self.array2d_chunk.get(x as u64, y as u64);
-            if (0 >= value) && (value < 256) {
-                *pixel = image::Rgb([value as u8, 0, 0]);
-            } else if (256 >= value) && (value < 512) {
-                *pixel = image::Rgb([255, (value - 256) as u8, 0]);
-            } else if (512 >= value) && (value < 768) {
-                *pixel = image::Rgb([(767 - value) as u8, 255, 0]);
+
+            if (value & 1) == 0 {
+                *pixel = image::Rgb([0 as u8, 0 as u8, 0 as u8]);
             } else {
-                *pixel = image::Rgb([0, 255, (value - 768) as u8]);
+                *pixel = image::Rgb([255 as u8, 255 as u8, 255 as u8]);
             }
         }
 
@@ -186,11 +183,11 @@ pub fn run_server(options: Mandel1Opt) {
 
     let start = Complex64{re: -2.0, im: -1.5};
     let end = Complex64{re: 1.0, im: 1.5};
-    let img_size = 4096;
-    let max_iter = 4096;
+    let img_size = 10000;
+    let max_iter = 10000;
     let x_step = (end.re - start.re) / (img_size as f64);
     let y_step = (end.im - start.im) / (img_size as f64);
-    let chunk_size = 256;
+    let chunk_size = 2000;
     let array2d_chunk = Array2DChunk::<u32>::new(img_size, img_size, chunk_size, chunk_size, 0);
     let mut all_chunks = Vec::new();
 
