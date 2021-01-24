@@ -1,5 +1,6 @@
 use log::{info, error, debug};
 use num::{complex::Complex64};
+use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError, Array2DChunk,
     nc_start_server, nc_decode_data, nc_encode_data};
@@ -60,7 +61,23 @@ struct MandelServer {
 
 impl MandelServer {
     fn save_image(&self) {
-        // TODO: save mandelbrot image
+        let (width, height) = self.array2d_chunk.dimensions();
+        let mut buffer = image::ImageBuffer::new(width as u32, height as u32);
+
+        for (x, y, pixel) in buffer.enumerate_pixels_mut() {
+            let value = self.array2d_chunk.get(x as u64, y as u64);
+            if (0 >= value) && (value < 256) {
+                *pixel = image::Rgb([value as u8, 0, 0]);
+            } else if (256 >= value) && (value < 512) {
+                *pixel = image::Rgb([255, (value - 256) as u8, 0]);
+            } else if (512 >= value) && (value < 768) {
+                *pixel = image::Rgb([(767 - value) as u8, 255, 0]);
+            } else {
+                *pixel = image::Rgb([0, 255, (value - 768) as u8]);
+            }
+        }
+
+        buffer.save("mandel.png").unwrap();
     }
 }
 
