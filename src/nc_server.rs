@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use rand::{random};
 
 use message_io::events::{EventQueue};
-use message_io::network::{NetworkManager, NetEvent, Endpoint};
+use message_io::network::{Network, NetEvent, Endpoint};
 
 use crate::nc_error::{NCError};
 use crate::nc_node::{NCNodeMessage};
@@ -48,7 +48,7 @@ pub trait NCServer {
 pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<T, NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
-    let mut network = NetworkManager::new(move |net_event| network_sender.send(NCServerEvent::InMsg(net_event)));
+    let mut network = Network::new(move |net_event| network_sender.send(NCServerEvent::InMsg(net_event)));
     network.listen_tcp((config.address, config.port))?;
 
     event_queue.sender().send_with_timer(NCServerEvent::CheckHeartbeat, Duration::from_secs(config.heartbeat * 2));
@@ -70,9 +70,7 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                 let node_info = NCNodeInfo::new(node_id, endpoint, hostname);
                                 all_nodes.push(node_info);
 
-                                if network.send(endpoint, NCServerMessage::AssignNodeID(node_id)).is_err() {
-                                    error!("Error while sending Register message to node: {}, {}", node_id, socket_addr);
-                                }
+                                network.send(endpoint, NCServerMessage::AssignNodeID(node_id));
 
                             }
                             NCNodeMessage::NeedsData(node_id) => {
@@ -80,18 +78,14 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                                 match nc_server.prepare_data_for_node(node_id) {
                                     Ok(Some(data)) => {
                                         debug!("Sending data to node: {}", node_id);
-                                        if network.send(endpoint, NCServerMessage::HasData(data)).is_err() {
-                                            error!("Error while sending HasData message to node: {}, {}", node_id, socket_addr);
-                                        }
+                                        network.send(endpoint, NCServerMessage::HasData(data));
                                     }
                                     Ok(None) => {
                                         debug!("No more data to send, waiting for other nodes to finish");
                                     }
                                     Err(e) => {
                                         error!("An error occurred while preparing the data for the node: {}, error: {}", node_id, e);
-                                        if network.send(endpoint, NCServerMessage::PrepareDataError).is_err() {
-                                            error!("Error while sending Error message to node: {}, {}", node_id, socket_addr);
-                                        }
+                                        network.send(endpoint, NCServerMessage::PrepareDataError);
                                     }
                                 }
                             }
@@ -119,6 +113,9 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                         error!("Node has disconnected: {}", endpoint.addr());
                         remove_node(&mut all_nodes, endpoint);
                     }
+                    NetEvent::DeserializationError(_) => {
+                        error!("Error while deserializing message");
+                    }
                 }
             }
             NCServerEvent::CheckHeartbeat => {
@@ -135,20 +132,12 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
                     NCJobStatus::Waiting => {
                         debug!("Mostly done, waiting for nodes to finish...");
                         let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
-                        if let Err(errors) = network.send_all(endpoints, NCServerMessage::Waiting) {
-                            for (endpoint, error) in errors.iter() {
-                                error!("Error while sending Waiting message to node: {}, error: {}", endpoint.addr(), error);
-                            }
-                        }
+                        network.send_all(endpoints, NCServerMessage::Waiting);
                     }
                     NCJobStatus::Finished => {
                         info!("Job is done!, Will exit now");
                         let endpoints = all_nodes.iter().map(|node_info| &node_info.endpoint);
-                        if let Err(errors) = network.send_all(endpoints, NCServerMessage::Finished) {
-                            for (endpoint, error) in errors.iter() {
-                                error!("Error while sending Finished message to node: {}, error: {}", endpoint.addr(), error);
-                            }
-                        }
+                        network.send_all(endpoints, NCServerMessage::Finished);
                         break;
                     }
                 };

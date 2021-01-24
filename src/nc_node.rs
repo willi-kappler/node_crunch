@@ -5,7 +5,7 @@ use log::{info, error, debug};
 use serde::{Serialize, Deserialize};
 
 use message_io::events::{EventQueue};
-use message_io::network::{NetworkManager, NetEvent};
+use message_io::network::{Network, NetEvent};
 
 use crate::nc_error::{NCError};
 use crate::nc_server::{NCServerMessage};
@@ -34,7 +34,7 @@ pub trait NCNode {
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
-    let mut network = NetworkManager::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
+    let mut network = Network::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
     let server_endpoint = network.connect_tcp((&config.address as &str, config.port))?;
 
     // let node_address = network.local_address(server_endpoint.resource_id());
@@ -43,7 +43,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
     // TODO: Get hostname
-    network.send(server_endpoint, NCNodeMessage::Register("hostname".to_string()))?;
+    network.send(server_endpoint, NCNodeMessage::Register("hostname".to_string()));
 
     let mut nc_node_id: u64 = 0;
 
@@ -56,18 +56,14 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                             NCServerMessage::AssignNodeID(id) => {
                                 info!("New node id assigned: {}", id);
                                 nc_node_id = id;
-                                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
-                                    error!("Could not send NeedsData message to server");
-                                }
+                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
                             }
                             NCServerMessage::HasData(data) => {
                                 info!("Received raw data from server, ready to process...");
                                 match nc_node.process_data_from_server(data) {
                                     Ok(data) => {
                                         debug!("Data has been processed successfully, sending to server...");
-                                        if network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data)).is_err() {
-                                            error!("Could not send HasData message to server");
-                                        }
+                                        network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data))
                                     }
                                     Err(e) => {
                                         error!("Data from server could not be processed properly: {}", e);
@@ -75,9 +71,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                                         // TODO: send messge to server that data could not be processed
                                     }
                                 };
-                                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
-                                    error!("Could not send NeedsData message to server");
-                                }
+                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
                             }
                             NCServerMessage::Waiting => {
                                 // Server is still waiting for other nodes to complete but
@@ -104,20 +98,19 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
                     NetEvent::AddedEndpoint(_) => {
                         error!("Received 'AddedEndpoint' message. This should not happen!");
                     }
+                    NetEvent::DeserializationError(_) => {
+                        error!("Error while deserializing message");
+                    }
                 }
             }
             NCNodeEvent::Heartbeat => {
                 debug!("Send hearbeat to server");
-                if network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id)).is_err() {
-                    error!("Could not send HearBeat message to server");
-                }
+                network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id));
                 event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
             }
             NCNodeEvent::DelayRequestData => {
                 debug!("Delay request data");
-                if network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id)).is_err() {
-                    error!("Could not send delayed NeedsData message to server");
-                }
+                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
             }
         }
     }
