@@ -1,4 +1,6 @@
 use std::time::Duration;
+use std::net::TcpStream;
+use std::net::{IpAddr, SocketAddr};
 
 use log::{info, error, debug};
 
@@ -8,6 +10,7 @@ use crate::nc_error::{NCError};
 use crate::nc_server::{NCServerMessage};
 use crate::nc_config::{NCConfiguration};
 use crate::nc_node_info::{NodeID};
+use crate::nc_util::{nc_send_receive_data};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCNodeMessage {
@@ -20,10 +23,32 @@ pub(crate) enum NCNodeMessage {
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
+    fn set_initial_data(&mut self, node_id: NodeID, initial_data: Vec<u8>) -> Result<(), NCError>;
 }
 
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
+    let ip_addr: IpAddr = config.address.parse()?;
+    let socket_addr = SocketAddr::new(ip_addr, config.port);
+
+    let (node_id, initial_data) = get_initial_data(&socket_addr)?;
+
+    nc_node.set_initial_data(node_id, initial_data)?;
+
     Ok(())
+}
+
+fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Vec<u8>), NCError> {
+    let initial_data = nc_send_receive_data(&NCNodeMessage::Register, socket_addr)?;
+
+    match initial_data {
+        NCServerMessage::InitialData(node_id, initial_data) => {
+            Ok((node_id, initial_data))
+        }
+        msg => {
+            error!("NCServerMessage missmatch, expected: InitialData, got: {:?}", msg);
+            Err(NCError::ServerMsgMismatch)
+        }
+    }
 }
 
 /*
