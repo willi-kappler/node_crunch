@@ -4,33 +4,21 @@ use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use rand::{random};
-
-use message_io::events::{EventQueue};
-use message_io::network::{Network, NetEvent, Endpoint};
-
 use crate::nc_error::{NCError};
 use crate::nc_node::{NCNodeMessage};
 use crate::nc_config::{NCConfiguration};
-use crate::nc_node_info::{NCNodeInfo};
+use crate::nc_node_info::{NCNodeInfo, NodeID};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage {
-    AssignNodeID(u64),
+    InitialData(NodeID, Vec<u8>),
     HasData(Vec<u8>),
+    HeartBeatOK(NCJobStatus),
     Waiting,
     Finished,
-    PrepareDataError,
 }
 
-#[derive(Debug)]
-enum NCServerEvent {
-    InMsg(NetEvent<NCNodeMessage>),
-    CheckHeartbeat,
-    CheckJobStatus,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum NCJobStatus {
     Unfinished,
     Waiting,
@@ -39,12 +27,17 @@ pub enum NCJobStatus {
 
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCServer {
-    fn prepare_data_for_node(&mut self, node_id: u64) -> Result<Option<Vec<u8>>, NCError>;
-    fn process_data_from_node(&mut self, node_id: u64, data: &Vec<u8>) -> Result<(), NCError>;
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<Option<Vec<u8>>, NCError>;
+    fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
     fn job_status(&self) -> NCJobStatus;
-    fn heartbeat_timeout(&mut self, node_id: u64);
+    fn heartbeat_timeout(&mut self, node_id: NodeID);
 }
 
+pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<T, NCError> {
+    Ok(nc_server)
+}
+
+/*
 pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<T, NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
@@ -149,14 +142,15 @@ pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfigura
 
     Ok(nc_server)
 }
+*/
 
-fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> u64 {
-    let mut new_id: u64 = random();
+fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> NodeID {
+    let mut new_id: NodeID = NodeID::random();
 
     'l1: loop {
         for node_info in all_nodes.iter() {
             if node_info.node_id == new_id {
-                new_id = random();
+                new_id = NodeID::random();
                 continue 'l1
             }
         }
@@ -167,16 +161,12 @@ fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> u64 {
     new_id
 }
 
-fn update_heartbeat(all_nodes: &mut Vec<NCNodeInfo>, node_id: u64) {
+fn update_heartbeat(all_nodes: &mut Vec<NCNodeInfo>, node_id: NodeID) {
     for node_info in all_nodes.iter_mut() {
         if node_info.node_id == node_id {
             node_info.update_heartbeat();
         }
     }
-}
-
-fn remove_node(all_nodes: &mut Vec<NCNodeInfo>, endpoint: Endpoint) {
-    all_nodes.retain(|node_info| node_info.endpoint != endpoint);
 }
 
 fn check_heartbeat<T: NCServer>(all_nodes: &Vec<NCNodeInfo>, limit: u64, nc_server: &mut T) {

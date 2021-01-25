@@ -4,26 +4,17 @@ use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use message_io::events::{EventQueue};
-use message_io::network::{Network, NetEvent};
-
 use crate::nc_error::{NCError};
 use crate::nc_server::{NCServerMessage};
 use crate::nc_config::{NCConfiguration};
+use crate::nc_node_info::{NodeID};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCNodeMessage {
-    Register(String),
-    NeedsData(u64),
-    HasData(u64, Vec<u8>),
-    HeartBeat(u64),
-}
-
-#[derive(Debug)]
-enum NCNodeEvent {
-    InMsg(NetEvent<NCServerMessage>),
-    Heartbeat,
-    DelayRequestData,
+    Register,
+    NeedsData(NodeID),
+    HasData(NodeID, Vec<u8>),
+    HeartBeat(NodeID),
 }
 
 // TODO: Generic trait, U for data in, V for data out
@@ -31,6 +22,11 @@ pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
 }
 
+pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
+    Ok(())
+}
+
+/*
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
     let mut event_queue = EventQueue::new();
     let network_sender = event_queue.sender().clone();
@@ -117,3 +113,4 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     Ok(())
 }
+*/

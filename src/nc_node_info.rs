@@ -1,17 +1,25 @@
 use std::time::{Instant};
 
-use message_io::network::{Endpoint};
+use rand::{random};
+use serde::{Serialize, Deserialize};
+
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NodeID(u64);
 
 pub(crate) struct NCNodeInfo {
-    pub(crate) node_id: u64,
-    pub(crate) endpoint: Endpoint,
+    pub(crate) node_id: NodeID,
     pub(crate) instant: Instant,
-    pub(crate) hostname: String,
+}
+
+impl NodeID {
+    pub fn random() -> Self {
+        NodeID(random())
+    }
 }
 
 impl NCNodeInfo {
-    pub fn new(node_id: u64, endpoint: Endpoint, hostname: String) -> Self {
-        NCNodeInfo{ node_id, endpoint, instant: Instant::now(), hostname }
+    pub fn new(node_id: NodeID) -> Self {
+        NCNodeInfo{ node_id, instant: Instant::now() }
     }
 
     pub fn update_heartbeat(&mut self) {
