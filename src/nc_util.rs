@@ -23,7 +23,9 @@ pub fn nc_decode_data2<T: DeserializeOwned>(data: &Vec<u8>) -> Result<T, NCError
 pub fn nc_send_data<T: Serialize>(data: &T, socket_addr: &SocketAddr) -> Result<(), NCError> {
     let mut tcp_stream = TcpStream::connect(socket_addr)?;
     let data = nc_encode_data(data)?;
-    tcp_stream.write(&data)?;
+    let length = tcp_stream.write(&data)?;
+    debug!("nc_send_data send {} bytes", length);
+
     Ok(())
 }
 
@@ -31,11 +33,11 @@ pub fn nc_send_receive_data<S: Serialize, D: DeserializeOwned>(data: &S, socket_
     let mut tcp_stream = TcpStream::connect(socket_addr)?;
     let data = nc_encode_data(data)?;
     let length = tcp_stream.write(&data)?;
-    debug!("send_receive_data send {} bytes", length);
+    debug!("nc_send_receive_data send {} bytes", length);
 
     let mut buffer: Vec<u8> = Vec::new();
     let length = tcp_stream.read_to_end(&mut buffer)?;
-    debug!("send_receive_data read {} bytes", length);
+    debug!("nc_send_receive_data read {} bytes", length);
 
     let result = nc_decode_data2(&buffer)?;
     Ok(result)

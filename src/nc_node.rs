@@ -1,13 +1,14 @@
 use std::time::Duration;
 use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddr};
+use std::{thread, time};
 
 use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use crate::nc_error::{NCError};
-use crate::nc_server::{NCServerMessage};
+use crate::{nc_error::{NCError}, nc_send_data};
+use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::{NCConfiguration};
 use crate::nc_node_info::{NodeID};
 use crate::nc_util::{nc_send_receive_data};
@@ -34,10 +35,18 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     nc_node.set_initial_data(node_id, initial_data)?;
 
+    let heartbeat_duration = config.heartbeat;
+    let heartbeat_thread = start_hearbeat(node_id, socket_addr, heartbeat_duration);
+
+    start_main_loop(nc_node, socket_addr, config, node_id);
+
+    heartbeat_thread.join().map_err(|_| NCError::ThreadJoin)?;
     Ok(())
 }
 
 fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Vec<u8>), NCError> {
+    debug!("Get initial data");
+
     let initial_data = nc_send_receive_data(&NCNodeMessage::Register, socket_addr)?;
 
     match initial_data {
@@ -51,91 +60,81 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Vec<u8>), NCErr
     }
 }
 
-/*
-pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
-    let mut event_queue = EventQueue::new();
-    let network_sender = event_queue.sender().clone();
-    let mut network = Network::new(move |net_event| network_sender.send(NCNodeEvent::InMsg(net_event)));
-    let server_endpoint = network.connect_tcp((&config.address as &str, config.port))?;
+fn start_hearbeat(node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: u64) -> thread::JoinHandle<()> {
+    debug!("Start heartbeat thread, node_id: {:?}, heartbeat_duration: {}", node_id, heartbeat_duration);
 
-    // let node_address = network.local_address(server_endpoint.resource_id());
+    thread::spawn(move || {
+        loop {
+            thread::sleep(time::Duration::from_secs(heartbeat_duration));
 
-    info!("Connected to server: {}", &config.address);
+            match nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
+                Ok(NCServerMessage::HeartBeatOK(NCJobStatus::Finished)) => {
+                    break
+                }
+                Ok(NCServerMessage::HeartBeatOK(_)) => {
+                    continue
+                }
+                Ok(msg) => {
+                    error!("NCServerMessage missmatch, expected: InitialData, got: {:?}", msg);
+                }
+                Err(e) => {
+                    error!("Error while sending hearbeat to server: {}", e);
+                }
+            }
+        }
+    })
+}
 
-    event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
-    // TODO: Get hostname
-    network.send(server_endpoint, NCNodeMessage::Register("hostname".to_string()));
-
-    let mut nc_node_id: u64 = 0;
-
+fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
     loop {
-        match event_queue.receive() {
-            NCNodeEvent::InMsg(msg) => {
-                match msg {
-                    NetEvent::Message(_, server_msg) => {
-                        match server_msg {
-                            NCServerMessage::AssignNodeID(id) => {
-                                info!("New node id assigned: {}", id);
-                                nc_node_id = id;
-                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
+        debug!("Ask server for new data");
+
+        match nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr) {
+            Ok(NCServerMessage::HasData(data)) => {
+                debug!("New data received from server");
+
+                match nc_node.process_data_from_server(data) {
+                    Ok(result) => {
+                        match nc_send_data(&result, &socket_addr) {
+                            Ok(_) => {
+                                debug!("Processed data has been send sucessfully to server");
                             }
-                            NCServerMessage::HasData(data) => {
-                                info!("Received raw data from server, ready to process...");
-                                match nc_node.process_data_from_server(data) {
-                                    Ok(data) => {
-                                        debug!("Data has been processed successfully, sending to server...");
-                                        network.send(server_endpoint, NCNodeMessage::HasData(nc_node_id, data))
-                                    }
-                                    Err(e) => {
-                                        error!("Data from server could not be processed properly: {}", e);
-                                        info!("Requesting new data");
-                                        // TODO: send messge to server that data could not be processed
-                                    }
-                                };
-                                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
-                            }
-                            NCServerMessage::Waiting => {
-                                // Server is still waiting for other nodes to complete but
-                                // it doesn't have any work for us to do now.
-                                info!("Server is waiting for other nodes to finish...");
-                                debug!("Will retry in {} seconds", config.delay_request_data);
-                                event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
-                            }
-                            NCServerMessage::Finished => {
-                                info!("Server is done, exit now");
-                                break;
-                            }
-                            NCServerMessage::PrepareDataError => {
-                                error!("Server has sent a PrepareDataError, will retry in {} seconds", config.delay_request_data);
-                                event_queue.sender().send_with_timer(NCNodeEvent::DelayRequestData, Duration::from_secs(config.delay_request_data));
+                            Err(e) => {
+                                error!("Error while sending processed data to server: {}", e);
                             }
                         }
                     }
-                    NetEvent::RemovedEndpoint(_) => {
-                        // TODO: Try reconnect
-                        error!("Connection to server lost. Exit now");
-                        break;
-                    }
-                    NetEvent::AddedEndpoint(_) => {
-                        error!("Received 'AddedEndpoint' message. This should not happen!");
-                    }
-                    NetEvent::DeserializationError(_) => {
-                        error!("Error while deserializing message");
+                    Err(e) => {
+                        error!("Error while processing data from server: {}", e);
                     }
                 }
             }
-            NCNodeEvent::Heartbeat => {
-                debug!("Send hearbeat to server");
-                network.send(server_endpoint, NCNodeMessage::HeartBeat(nc_node_id));
-                event_queue.sender().send_with_timer(NCNodeEvent::Heartbeat, Duration::from_secs(config.heartbeat));
+            Ok(NCServerMessage::Waiting) => {
+                // The node will not exit here since the job is not 100% done.
+                // This just means that all the remaining work has already
+                // been distributed among all nodes.
+                // One of the nodes can still crash and thus free nodes have to ask the server for more work
+                // from time to time (delay_request_data).
+
+                debug!("Waiting for other nodes to finish...");
+                debug!("Will try again in {} seconds (delay_request_data)", config.delay_request_data);
+                thread::sleep(time::Duration::from_secs(config.delay_request_data));
             }
-            NCNodeEvent::DelayRequestData => {
-                debug!("Delay request data");
-                network.send(server_endpoint, NCNodeMessage::NeedsData(nc_node_id));
+            Ok(NCServerMessage::Finished) => {
+                debug!("Job is done, exit now.");
+                break
+            }
+            Ok(NCServerMessage::PrepareDataError) => {
+                error!("Error while preparing data for node.");
+                debug!("Will try again in {} seconds (delay_request_data)", config.delay_request_data);
+                thread::sleep(time::Duration::from_secs(config.delay_request_data));
+            }
+            Ok(msg) => {
+                error!("NCServerMessage missmatch, expected: HasData, got: {:?}", msg);
+            }
+            Err(e) => {
+                error!("Error while getting new data from server: {}", e);
             }
         }
     }
-
-    Ok(())
 }
-*/

@@ -10,6 +10,7 @@ pub enum NCError {
     Deserialize(bincode::Error),
     ServerMsgMismatch,
     NodeMsgMismatch,
+    ThreadJoin,
     Custom(u32),
 }
 
@@ -22,6 +23,7 @@ impl fmt::Display for NCError {
             NCError::Deserialize(e) => write!(f, "Deserialize bincode error: {}", e),
             NCError::ServerMsgMismatch => write!(f, "Server message mismatch error"),
             NCError::NodeMsgMismatch => write!(f, "Node message mismatch error"),
+            NCError::ThreadJoin => write!(f, "Error while joining thread"),
             NCError::Custom(e) => write!(f, "Custom user defined error: {}", e),
         }
     }
@@ -36,6 +38,7 @@ impl error::Error for NCError {
             NCError::Deserialize(e) => Some(e),
             NCError::ServerMsgMismatch => None,
             NCError::NodeMsgMismatch => None,
+            NCError::ThreadJoin => None,
             NCError::Custom(_) => Some(self),
         }
     }

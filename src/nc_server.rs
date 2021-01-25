@@ -16,6 +16,7 @@ pub(crate) enum NCServerMessage {
     HeartBeatOK(NCJobStatus),
     Waiting,
     Finished,
+    PrepareDataError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
