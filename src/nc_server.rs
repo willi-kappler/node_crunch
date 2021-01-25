@@ -1,4 +1,6 @@
 use std::time::{Duration};
+use std::sync::{Arc, Mutex};
+use std::{thread, time};
 
 use log::{info, error, debug};
 
@@ -32,10 +34,26 @@ pub trait NCServer {
     fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
     fn job_status(&self) -> NCJobStatus;
     fn heartbeat_timeout(&mut self, node_id: NodeID);
+    fn finish_job(&mut self);
 }
 
-pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<T, NCError> {
-    Ok(nc_server)
+pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
+    let nc_server = Arc::new(Mutex::new(nc_server));
+
+    let heartbeat_handle = start_heartbeat_check(config.heartbeat);
+
+    Ok(())
+}
+
+fn start_heartbeat_check(heartbeat_duration: u64) -> thread::JoinHandle<()> {
+    debug!("Start heartbeat check");
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(time::Duration::from_secs(2 * heartbeat_duration));
+
+        }
+    })
 }
 
 /*
