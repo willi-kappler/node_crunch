@@ -6,7 +6,7 @@ use log::{info, error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use crate::nc_error::{NCError};
+use crate::{NCNode, nc_error::{NCError}};
 use crate::nc_node::{NCNodeMessage};
 use crate::nc_config::{NCConfiguration};
 use crate::nc_node_info::{NCNodeInfo, NodeID};
@@ -37,23 +37,51 @@ pub trait NCServer {
     fn finish_job(&mut self);
 }
 
-pub fn nc_start_server<T: NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
+pub fn nc_start_server<T: 'static + NCServer + Send>(mut nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     let nc_server = Arc::new(Mutex::new(nc_server));
+    let mut node_list = Arc::new(Mutex::new(Vec::<NCNodeInfo>::new()));
 
-    let heartbeat_handle = start_heartbeat_check(config.heartbeat);
+    let heartbeat_handle = start_heartbeat_check(2 * config.heartbeat, node_list.clone(), nc_server.clone());
+
+    start_main_loop(node_list, nc_server)?;
+
+    heartbeat_handle.join();
 
     Ok(())
 }
 
-fn start_heartbeat_check(heartbeat_duration: u64) -> thread::JoinHandle<()> {
+fn start_heartbeat_check<T: 'static + NCServer + Send>(heartbeat_duration: u64, node_list: Arc<Mutex<Vec<NCNodeInfo>>>, nc_server: Arc<Mutex<T>>) -> thread::JoinHandle<()> {
     debug!("Start heartbeat check");
 
     thread::spawn(move || {
         loop {
-            thread::sleep(time::Duration::from_secs(2 * heartbeat_duration));
+            thread::sleep(time::Duration::from_secs(heartbeat_duration));
 
+            match node_list.lock() {
+                Ok(node_list) => {
+                    for node in node_list.iter() {
+                        if node.heartbeat_invalid(heartbeat_duration) {
+                            match nc_server.lock() {
+                                Ok(mut nc_server) => {
+                                    nc_server.heartbeat_timeout(node.node_id);
+                                }
+                                Err(e) => {
+                                    error!("NC server lock error while checking heartbeats: {}", e);
+                                }
+                            }
+                        }
+                    }        
+                }
+                Err(e) => {
+                    error!("Node list lock error while checking hearbeats: {}", e);
+                }
+            }
         }
     })
+}
+
+fn start_main_loop<T: NCServer>(node_list: Arc<Mutex<Vec<NCNodeInfo>>>, nc_server: Arc<Mutex<T>>) -> Result<(), NCError> {
+    Ok(())
 }
 
 /*
