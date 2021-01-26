@@ -1,7 +1,5 @@
 use std::{error, fmt, io, net};
 
-use bincode;
-
 #[derive(Debug)]
 pub enum NCError {
     IPAddrParse(net::AddrParseError),
@@ -11,6 +9,7 @@ pub enum NCError {
     ServerMsgMismatch,
     NodeMsgMismatch,
     ThreadJoin,
+    MutexPoison,
     Custom(u32),
 }
 
@@ -24,6 +23,7 @@ impl fmt::Display for NCError {
             NCError::ServerMsgMismatch => write!(f, "Server message mismatch error"),
             NCError::NodeMsgMismatch => write!(f, "Node message mismatch error"),
             NCError::ThreadJoin => write!(f, "Error while joining thread"),
+            NCError::MutexPoison => write!(f, "Error while locking mutex"),
             NCError::Custom(e) => write!(f, "Custom user defined error: {}", e),
         }
     }
@@ -39,6 +39,7 @@ impl error::Error for NCError {
             NCError::ServerMsgMismatch => None,
             NCError::NodeMsgMismatch => None,
             NCError::ThreadJoin => None,
+            NCError::MutexPoison => None,
             NCError::Custom(_) => Some(self),
         }
     }

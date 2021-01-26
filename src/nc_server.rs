@@ -1,6 +1,7 @@
 use std::time::{Duration};
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
+use std::net::{TcpListener, TcpStream};
 
 use log::{info, error, debug};
 
@@ -43,9 +44,13 @@ pub fn nc_start_server<T: 'static + NCServer + Send>(mut nc_server: T, config: N
 
     let heartbeat_handle = start_heartbeat_check(2 * config.heartbeat, node_list.clone(), nc_server.clone());
 
-    start_main_loop(node_list, nc_server)?;
+    start_main_loop(node_list, nc_server.clone(), config)?;
 
-    heartbeat_handle.join();
+    heartbeat_handle.join().map_err(|_| NCError::ThreadJoin)?;
+
+    debug!("Call finish_job for nc_server");
+
+    nc_server.lock().map_err(|_| NCError::MutexPoison)?.finish_job();
 
     Ok(())
 }
@@ -66,22 +71,45 @@ fn start_heartbeat_check<T: 'static + NCServer + Send>(heartbeat_duration: u64, 
                                     nc_server.heartbeat_timeout(node.node_id);
                                 }
                                 Err(e) => {
-                                    error!("NC server lock error while checking heartbeats: {}", e);
+                                    error!("Error in heartbeat check, could not acquire nc_server lock: {}", e);
                                 }
                             }
                         }
                     }        
                 }
                 Err(e) => {
-                    error!("Node list lock error while checking hearbeats: {}", e);
+                    error!("Error in heartbeat check, could not acquire node_list lock: {}", e);
                 }
             }
         }
     })
 }
 
-fn start_main_loop<T: NCServer>(node_list: Arc<Mutex<Vec<NCNodeInfo>>>, nc_server: Arc<Mutex<T>>) -> Result<(), NCError> {
+fn start_main_loop<T: NCServer>(node_list: Arc<Mutex<Vec<NCNodeInfo>>>, nc_server: Arc<Mutex<T>>, config: NCConfiguration) -> Result<(), NCError> {
+    debug!("Start main loop");
+
+    let listener = TcpListener::bind("127.0.0.1:80")?; // TODO: address and port from configuration
+    let quit = Arc::new(Mutex::new(false));
+
+    loop {
+        let (stream, addr) = listener.accept()?;
+        debug!("Got new connection from node: {}", addr);
+        handle_node(stream, quit.clone(), node_list.clone(), nc_server.clone());
+
+        if *(quit.lock().map_err(|_| NCError::MutexPoison)?) {
+            debug!("Quit main loop");
+            break 
+        }
+    }
+
     Ok(())
+}
+
+fn handle_node<T: NCServer>(stream: TcpStream, quit: Arc<Mutex<bool>>, node_list: Arc<Mutex<Vec<NCNodeInfo>>>, nc_server: Arc<Mutex<T>>) -> thread::JoinHandle<()> {
+    debug!("Start handle client");
+
+    thread::spawn(move || {
+    })
 }
 
 /*
