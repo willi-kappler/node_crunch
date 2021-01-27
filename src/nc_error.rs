@@ -1,4 +1,4 @@
-use std::{error, fmt, io, net};
+use std::{error, fmt, io, net, sync};
 
 #[derive(Debug)]
 pub enum NCError {
@@ -54,5 +54,11 @@ impl From<io::Error> for NCError {
 impl From<net::AddrParseError> for NCError {
     fn from(e: net::AddrParseError) -> NCError {
         NCError::IPAddrParse(e)
+    }
+}
+
+impl<T> From<sync::PoisonError<sync::MutexGuard<'_, T>>> for NCError {
+    fn from(_: sync::PoisonError<sync::MutexGuard<'_, T>>) -> NCError {
+        NCError::MutexPoison
     }
 }
