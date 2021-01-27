@@ -1,15 +1,15 @@
 use std::net::{IpAddr, SocketAddr};
-use std::{thread, time};
+use std::{thread, time::Duration};
 
 use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use crate::{nc_error::{NCError}, nc_send_data};
+use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::{NCConfiguration};
 use crate::nc_node_info::{NodeID};
-use crate::nc_util::{nc_send_receive_data};
+use crate::nc_util::{nc_send_receive_data, nc_send_data};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCNodeMessage {
@@ -63,7 +63,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: u64) -> thread::JoinHandle<()> {
     debug!("Start start_hearbeat_thread(), node_id: {:?}, heartbeat_duration: {}", node_id, heartbeat_duration);
 
-    let duration = time::Duration::from_secs(heartbeat_duration);
+    let duration = Duration::from_secs(heartbeat_duration);
     let mut error_counter = 0;
 
     thread::spawn(move || {
@@ -79,7 +79,7 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
 
                     error_counter += 1;
                     if error_counter >= 10 { // TODO: Make this configurable
-                        error!("Error in start_heartbeat_thread(), error_counter exceeded limit: {}", error_counter);
+                        error!("Error in start_heartbeat_thread(), error_counter limit exceeded: {}", error_counter);
                         break;
                     }
                 }
@@ -91,7 +91,7 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
 fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
     debug!("Start start_main_loop(), socket_addr: {}, node_id: {:?}", socket_addr, node_id);
 
-    let duration = time::Duration::from_secs(config.delay_request_data);
+    let duration = Duration::from_secs(config.delay_request_data);
 
     loop {
         debug!("Ask server for new data");

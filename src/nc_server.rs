@@ -64,13 +64,8 @@ fn start_heartbeat_thread<T: 'static + NCServer + Send>(heartbeat_duration: u64,
         loop {
             thread::sleep(time::Duration::from_secs(heartbeat_duration));
 
-            match check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
-                Ok(_) => {
-                    // Nothing to do
-                }
-                Err(e) => {
-                    error!("Error in check_heartbeat(), could not acquire mutex: {}", e);
-                }
+            if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
+                error!("Error in check_heartbeat(), could not acquire mutex: {}", e);
             }
         }
     })
