@@ -31,11 +31,13 @@ type NCNodeInfoList = Arc<Mutex<Vec<NCNodeInfo>>>;
 
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCServer {
+    fn initial_data(&mut self) -> Result<Option<Vec<u8>>, NCError> {
+        Ok(None)
+    }
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
     fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
     fn heartbeat_timeout(&mut self, node_id: NodeID);
     fn finish_job(&mut self);
-    fn initial_data(&mut self) -> Result<Option<Vec<u8>>, NCError>;
 }
 
 pub fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {

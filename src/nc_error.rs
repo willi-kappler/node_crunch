@@ -6,6 +6,7 @@ pub enum NCError {
     IOError(io::Error),
     Serialize(bincode::Error),
     Deserialize(bincode::Error),
+    Bincode(Box<bincode::ErrorKind>),
     ServerMsgMismatch,
     NodeMsgMismatch,
     ThreadJoin,
@@ -20,6 +21,7 @@ impl fmt::Display for NCError {
             NCError::IOError(e) => write!(f, "IO error: {}", e),
             NCError::Serialize(e) => write!(f, "Serialize bincode error: {}", e),
             NCError::Deserialize(e) => write!(f, "Deserialize bincode error: {}", e),
+            NCError::Bincode(e) => write!(f, "Bincode error: {}", e),
             NCError::ServerMsgMismatch => write!(f, "Server message mismatch error"),
             NCError::NodeMsgMismatch => write!(f, "Node message mismatch error"),
             NCError::ThreadJoin => write!(f, "Error while joining thread"),
@@ -36,6 +38,7 @@ impl error::Error for NCError {
             NCError::IOError(e) => Some(e),
             NCError::Serialize(e) => Some(e),
             NCError::Deserialize(e) => Some(e),
+            NCError::Bincode(e) => Some(e),
             NCError::ServerMsgMismatch => None,
             NCError::NodeMsgMismatch => None,
             NCError::ThreadJoin => None,
@@ -48,6 +51,12 @@ impl error::Error for NCError {
 impl From<io::Error> for NCError {
     fn from(e: io::Error) -> NCError {
         NCError::IOError(e)
+    }
+}
+
+impl From<Box<bincode::ErrorKind>> for NCError {
+    fn from(e: Box<bincode::ErrorKind>) -> NCError {
+        NCError::Bincode(e)
     }
 }
 

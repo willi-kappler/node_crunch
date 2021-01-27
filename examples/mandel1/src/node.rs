@@ -35,7 +35,6 @@ impl NCNode for MandelNode {
         let result = nc_encode_data(&NodeData { chunk_id: input.chunk_id, source: array2d })?;
         Ok(result)
     }
-
 }
 
 pub fn run_node(options: Mandel1Opt) {

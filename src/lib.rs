@@ -18,7 +18,8 @@ mod array2d;
 
 pub use nc_server::{NCServer, NCJobStatus, nc_start_server};
 pub use nc_node::{NCNode, nc_start_node};
+pub use nc_node_info::{NodeID};
 pub use nc_error::NCError;
 pub use nc_config::{NCConfiguration};
-pub use nc_util::{nc_decode_data, nc_encode_data, nc_send_data, nc_send_receive_data};
+pub use nc_util::{nc_decode_data, nc_encode_data};
 pub use array2d::{Array2D, Array2DChunk};

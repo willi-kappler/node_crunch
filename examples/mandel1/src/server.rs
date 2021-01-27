@@ -2,7 +2,8 @@ use log::{info, error, debug};
 use num::{complex::Complex64};
 use image;
 
-use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError, Array2DChunk,
+use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
+    Array2DChunk, NodeID,
     nc_start_server, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
@@ -20,7 +21,7 @@ struct Chunk {
     y: u64,
     width: u64,
     height: u64,
-    node_id: u64,
+    node_id: NodeID,
     status: ChunkStatus,
 }
 
@@ -33,12 +34,12 @@ impl Chunk {
         self.status == ChunkStatus::Empty
     }
 
-    fn set_processing(&mut self, node_id: u64) {
+    fn set_processing(&mut self, node_id: NodeID) {
         self.status = ChunkStatus::Processing;
         self.node_id = node_id;
     }
 
-    fn is_processing(&self, node_id: u64) -> bool {
+    fn is_processing(&self, node_id: NodeID) -> bool {
         self.status == ChunkStatus::Processing &&
         self.node_id == node_id
     }
@@ -76,10 +77,28 @@ impl MandelServer {
 
         buffer.save("mandel.png").unwrap();
     }
+
+    fn is_job_done(&self) -> bool {
+        let mut empty = 0;
+        let mut processing = 0;
+        let mut finished = 0;
+
+        for chunk in self.all_chunks.iter() {
+            match chunk.status {
+                ChunkStatus::Empty => empty = empty + 1,
+                ChunkStatus::Processing => processing = processing + 1,
+                ChunkStatus::Finished => finished = finished + 1,
+            }
+        }
+
+        debug!("Job status: empty: {}, processing: {}, finished: {}", empty, processing, finished);
+
+        empty == 0 && processing == 0
+    }
 }
 
 impl NCServer for MandelServer {
-    fn prepare_data_for_node(&mut self, node_id: u64) -> Result<Option<Vec<u8>>, NCError> {
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         for i in 0..self.all_chunks.len() {
@@ -103,7 +122,7 @@ impl NCServer for MandelServer {
                     Ok(data) => {
                         current_chunk.set_processing(node_id);
                         debug!("preparing chunk {} for node {}", i, node_id);
-                        return Ok(Some(data))
+                        return Ok(NCJobStatus::Unfinished(data))
                     }
                     Err(e) => {
                         error!("An error occurred while preparing the data for the Node: {}, error: {}", node_id, e);
@@ -113,10 +132,14 @@ impl NCServer for MandelServer {
             }
         }
 
-        return Ok(None)
+        if self.is_job_done() {
+            Ok(NCJobStatus::Finished)
+        } else {
+            Ok(NCJobStatus::Waiting)
+        }
     }
 
-    fn process_data_from_node(&mut self, node_id: u64, node_data: &Vec<u8>) -> Result<(), NCError> {
+    fn process_data_from_node(&mut self, node_id: NodeID, node_data: &Vec<u8>) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
         match nc_decode_data::<NodeData>(node_data) {
@@ -140,31 +163,7 @@ impl NCServer for MandelServer {
         }
     }
 
-    fn job_status(&self) -> NCJobStatus {
-        let mut empty = 0;
-        let mut processing = 0;
-        let mut finished = 0;
-
-        for chunk in self.all_chunks.iter() {
-            match chunk.status {
-                ChunkStatus::Empty => empty = empty + 1,
-                ChunkStatus::Processing => processing = processing + 1,
-                ChunkStatus::Finished => finished = finished + 1,
-            }
-        }
-
-        debug!("Job status: empty: {}, processing: {}, finished: {}", empty, processing, finished);
-
-        if empty > 0 {
-            NCJobStatus::Unfinished
-        } else if processing > 0 {
-            NCJobStatus::Waiting
-        } else {
-            NCJobStatus::Finished
-        }
-    }
-
-    fn heartbeat_timeout(&mut self, node_id: u64) {
+    fn heartbeat_timeout(&mut self, node_id: NodeID) {
         info!("Heartbeat timeout, node_id: {}", node_id);
 
         for chunk in self.all_chunks.iter_mut() {
@@ -172,6 +171,10 @@ impl NCServer for MandelServer {
                 chunk.set_empty()
             }
         }
+    }
+
+    fn finish_job(&mut self) {
+        self.save_image();
     }
 }
 
@@ -194,7 +197,7 @@ pub fn run_server(options: Mandel1Opt) {
     for i in 0..array2d_chunk.num_of_chunks() {
         let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
         let chunk = Chunk {
-            x, y, width, height, node_id: 0, status: ChunkStatus::Empty
+            x, y, width, height, node_id: NodeID::new(), status: ChunkStatus::Empty
         };
 
         all_chunks.push(chunk);
@@ -206,9 +209,8 @@ pub fn run_server(options: Mandel1Opt) {
     };
 
     match nc_start_server(server, configuration) {
-        Ok(server) => {
+        Ok(_) => {
             info!("Calculation finished");
-            server.save_image();
         }
         Err(e) => {
             error!("An error occurred: {}", e);

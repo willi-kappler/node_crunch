@@ -13,6 +13,10 @@ pub(crate) struct NCNodeInfo {
 }
 
 impl NodeID {
+    pub fn new() -> Self {
+        NodeID(0)
+    }
+
     pub fn random() -> Self {
         NodeID(random())
     }

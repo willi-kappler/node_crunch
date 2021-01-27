@@ -21,8 +21,10 @@ pub(crate) enum NCNodeMessage {
 
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCNode {
+    fn set_initial_data(&mut self, node_id: NodeID, initial_data: Option<Vec<u8>>) -> Result<(), NCError> {
+        Ok(())
+    }
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
-    fn set_initial_data(&mut self, node_id: NodeID, initial_data: Option<Vec<u8>>) -> Result<(), NCError>;
 }
 
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
