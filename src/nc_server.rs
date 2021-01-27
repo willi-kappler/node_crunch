@@ -55,6 +55,7 @@ pub fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCCon
     debug!("Job done, exit now");
 
     Ok(())
+    // Mutex nc_server is unlocked here
 }
 
 fn start_heartbeat_thread<T: 'static + NCServer + Send>(heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) -> thread::JoinHandle<()> {
@@ -78,10 +79,12 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
     for node in node_list.iter() {
         if node.heartbeat_invalid(heartbeat_duration) {
             nc_server.lock()?.heartbeat_timeout(node.node_id);
+            // Mutex nc_server is unlocked here
         }
     }
 
     Ok(())
+    // Mutex node_list is unlocked here
 }
 
 fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, config: NCConfiguration) -> Result<(), NCError> {
@@ -125,7 +128,7 @@ fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_s
         if *(quit.lock()?) {
             debug!("Quit main loop");
             break
-        }
+        } // Mutex quit is unlocked here
     }
 
     debug!("Waiting for all threads to finish...");
@@ -153,6 +156,7 @@ fn start_node_thread<T: 'static + NCServer + Send>(stream: TcpStream, quit: Arc<
                         error!("Error in start_node_thread(), could not acquire lock: {}", e);
                     }
                 }
+                // Mutex quit is unlocked here
             }
             Err(e) => {
                 error!("Error in handle_node(): {} ", e);
@@ -173,12 +177,12 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 let node_id = get_new_node_id(&node_list);
                 node_list.push(NCNodeInfo::new(node_id));
                 node_id
-            }; // Mutex node_list unlocked here
+            }; // Mutex node_list is unlocked here
 
             let initial_data = {
                 let mut nc_server = nc_server.lock()?;
                 nc_server.initial_data()?
-            }; // Mutex nc_server unlocked here
+            }; // Mutex nc_server is unlocked here
 
             debug!("Registering new node: {}, {}", node_id, stream.peer_addr()?);
             nc_send_data2(&NCServerMessage::InitialData(node_id, initial_data), &mut stream)?;
@@ -202,6 +206,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
 
             let mut nc_server = nc_server.lock()?;
             nc_server.process_data_from_node(node_id, &data).map(|_| false)?;
+            // Mutex nc_server is unlocked here
         }
         NCNodeMessage::HeartBeat(node_id) => {
             debug!("Got hearbeat from node: {}", node_id);
@@ -213,6 +218,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                     node.update_heartbeat();
                 }
             }
+            // Mutex node_list is unlocked here
         }
     }
 
