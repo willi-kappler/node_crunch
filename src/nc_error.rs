@@ -10,6 +10,7 @@ pub enum NCError {
     NodeMsgMismatch,
     ThreadJoin,
     MutexPoison,
+    PrepareData,
     Custom(u32),
 }
 
@@ -24,6 +25,7 @@ impl fmt::Display for NCError {
             NCError::NodeMsgMismatch => write!(f, "Node message mismatch error"),
             NCError::ThreadJoin => write!(f, "Error while joining thread"),
             NCError::MutexPoison => write!(f, "Error while locking mutex"),
+            NCError::PrepareData => write!(f, "Error while preparing data for node"),
             NCError::Custom(e) => write!(f, "Custom user defined error: {}", e),
         }
     }
@@ -40,6 +42,7 @@ impl error::Error for NCError {
             NCError::NodeMsgMismatch => None,
             NCError::ThreadJoin => None,
             NCError::MutexPoison => None,
+            NCError::PrepareData => None,
             NCError::Custom(_) => Some(self),
         }
     }
