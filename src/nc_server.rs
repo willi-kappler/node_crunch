@@ -180,11 +180,11 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 nc_server.initial_data()?
             }; // Mutex nc_server unlocked here
 
-            debug!("Registering new node: {:?}, {}", node_id, stream.peer_addr()?);
+            debug!("Registering new node: {}, {}", node_id, stream.peer_addr()?);
             nc_send_data2(&NCServerMessage::InitialData(node_id, initial_data), &mut stream)?;
         }
         NCNodeMessage::NeedsData(node_id) => {
-            debug!("Node {:?} needs data to process", node_id);
+            debug!("Node {} needs data to process", node_id);
 
             let data_for_node = {
                 let mut nc_server = nc_server.lock().map_err(|_| NCError::MutexPoison)?;
@@ -198,13 +198,13 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
             return Ok(quit)
         }
         NCNodeMessage::HasData(node_id, data) => {
-            debug!("Node {:?} has processed some data and we received the results", node_id);
+            debug!("Node {} has processed some data and we received the results", node_id);
 
             let mut nc_server = nc_server.lock().map_err(|_| NCError::MutexPoison)?;
             nc_server.process_data_from_node(node_id, &data).map(|_| false)?;
         }
         NCNodeMessage::HeartBeat(node_id) => {
-            debug!("Got hearbeat from node: {:?}", node_id);
+            debug!("Got hearbeat from node: {}", node_id);
 
             let mut node_list = node_list.lock().map_err(|_| NCError::MutexPoison)?;
 

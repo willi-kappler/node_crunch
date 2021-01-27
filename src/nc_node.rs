@@ -61,7 +61,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 }
 
 fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: u64) -> thread::JoinHandle<()> {
-    debug!("Start start_hearbeat_thread(), node_id: {:?}, heartbeat_duration: {}", node_id, heartbeat_duration);
+    debug!("Start start_hearbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration);
 
     let duration = Duration::from_secs(heartbeat_duration);
     let mut error_counter = 0;
@@ -89,7 +89,7 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
 }
 
 fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
-    debug!("Start start_main_loop(), socket_addr: {}, node_id: {:?}", socket_addr, node_id);
+    debug!("Start start_main_loop(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
     let duration = Duration::from_secs(config.delay_request_data);
 
@@ -110,7 +110,7 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
 }
 
 fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID) -> Result<bool, NCError> {
-    debug!("Start get_and_process_data(), socket_addr: {}, node_id: {:?}", socket_addr, node_id);
+    debug!("Start get_and_process_data(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
     let result = nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr)?;
 

@@ -1,4 +1,5 @@
 use std::time::{Instant};
+use std::fmt;
 
 use rand::{random};
 use serde::{Serialize, Deserialize};
@@ -14,6 +15,12 @@ pub(crate) struct NCNodeInfo {
 impl NodeID {
     pub fn random() -> Self {
         NodeID(random())
+    }
+}
+
+impl fmt::Display for NodeID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
