@@ -1,9 +1,7 @@
-use std::time::Duration;
-use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddr};
 use std::{thread, time};
 
-use log::{info, error, debug};
+use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
 
@@ -24,7 +22,7 @@ pub(crate) enum NCNodeMessage {
 // TODO: Generic trait, U for data in, V for data out
 pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
-    fn set_initial_data(&mut self, node_id: NodeID, initial_data: Vec<u8>) -> Result<(), NCError>;
+    fn set_initial_data(&mut self, node_id: NodeID, initial_data: Option<Vec<u8>>) -> Result<(), NCError>;
 }
 
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
@@ -46,7 +44,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     Ok(())
 }
 
-fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Vec<u8>), NCError> {
+fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>), NCError> {
     debug!("Start get_initial_data(), socket_addr: {}", socket_addr);
 
     let initial_data = nc_send_receive_data(&NCNodeMessage::Register, socket_addr)?;
@@ -66,42 +64,28 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
     debug!("Start start_hearbeat_thread(), node_id: {:?}, heartbeat_duration: {}", node_id, heartbeat_duration);
 
     let duration = time::Duration::from_secs(heartbeat_duration);
+    let mut error_counter = 0;
 
     thread::spawn(move || {
         loop {
             thread::sleep(duration);
 
-            match send_heartbeat(node_id, socket_addr) {
-                Ok(quit) => {
-                    if quit { break }
+            match nc_send_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
+                Ok(_) => {
+                    error_counter = 0;
                 }
                 Err(e) => {
-                    error!("Error in send_hearbeat: {}", e);
+                    error!("Error in start_heartbeat_thread(): {}", e);
+
+                    error_counter += 1;
+                    if error_counter >= 10 { // TODO: Make this configurable
+                        error!("Error in start_heartbeat_thread(), error_counter exceeded limit: {}", error_counter);
+                        break;
+                    }
                 }
             }
         }
     })
-}
-
-fn send_heartbeat(node_id: NodeID, socket_addr: SocketAddr) -> Result<bool, NCError> {
-    debug!("Start send_heartbeat(), node_id: {:?}, socket_addr: {}", node_id, socket_addr);
-
-    let result = nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr)?;
-
-    match result {
-        NCServerMessage::HeartBeatOK(NCJobStatus::Finished) => {
-            debug!("Job is done, heartbeats no longer needed");
-            Ok(true)
-        }
-        NCServerMessage::HeartBeatOK(_) => {
-            debug!("Got heartbeat OK from server");
-            Ok(false)
-        }
-        msg => {
-            debug!("NCServerMessage missmatch, expected: HeartBeatOK, got: {:?}", msg);
-            Err(NCError::ServerMsgMismatch)
-        }
-    }
 }
 
 fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
@@ -130,33 +114,31 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
 
     let result = nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr)?;
 
-    match result {
-        NCServerMessage::HasData(data) => {
-            debug!("New data received from server");
-            let result = nc_node.process_data_from_server(data)?;
-            nc_send_data(&result, &socket_addr).map(|_| false)
-        }
-        NCServerMessage::Waiting => {
-            // The node will not exit here since the job is not 100% done.
-            // This just means that all the remaining work has already
-            // been distributed among all nodes.
-            // One of the nodes can still crash and thus free nodes have to ask the server for more work
-            // from time to time (delay_request_data).
+    if let NCServerMessage::JobStatus(job_status) = result {
+        match job_status {
+            NCJobStatus::Unfinished(data) => {
+                debug!("New data received from server");
+                let result = nc_node.process_data_from_server(data)?;
+                nc_send_data(&result, &socket_addr).map(|_| false)
+            }
+            NCJobStatus::Waiting => {
+                // The node will not exit here since the job is not 100% done.
+                // This just means that all the remaining work has already
+                // been distributed among all nodes.
+                // One of the nodes can still crash and thus free nodes have to ask the server for more work
+                // from time to time (delay_request_data).
 
-            debug!("Waiting for other nodes to finish...");
-            Ok(false)
+                debug!("Waiting for other nodes to finish...");
+                Ok(false)
+            }
+            NCJobStatus::Finished => {
+                debug!("Job is done, exit now.");
+                Ok(true)
+            }
         }
-        NCServerMessage::Finished => {
-            debug!("Job is done, exit now.");
-            Ok(true)
-        }
-        NCServerMessage::PrepareDataError => {
-            debug!("Error while preparing data for node.");
-            Err(NCError::PrepareData)
-        }
-        msg => {
-            debug!("NCServerMessage missmatch, expected: HasData, got: {:?}", msg);
-            Err(NCError::ServerMsgMismatch)
-        }
+    } else {
+        error!("Error in get_and_process_data(), NCServerMessage missmatch, expected: JobStatus, got: {:?}", result);
+        Err(NCError::ServerMsgMismatch)
     }
+
 }
