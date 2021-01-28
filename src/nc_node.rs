@@ -43,6 +43,8 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     start_main_loop(nc_node, socket_addr, config, node_id);
 
     heartbeat_handle.join().map_err(|_| NCError::ThreadJoin)?;
+
+    debug!("Exit nc_start_node()");
     Ok(())
 }
 
@@ -73,9 +75,13 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
         loop {
             thread::sleep(duration);
 
-            match nc_send_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
-                Ok(_) => {
+            match nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
+                Ok(NCServerMessage::HeartBeat(quit)) => {
                     error_counter = 0;
+                    if quit { break }
+                }
+                Ok(msg) => {
+                    error!("Error in start_heartbeat_thread(), unexpected server message: {:?}", msg);
                 }
                 Err(e) => {
                     error!("Error in start_heartbeat_thread(): {}", e);
@@ -110,6 +116,8 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
             }
         }
     }
+
+    debug!("Main loop finished")
 }
 
 fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID, duration: Duration) -> Result<bool, NCError> {

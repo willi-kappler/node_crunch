@@ -16,6 +16,7 @@ use crate::nc_util::{nc_receive_data, nc_send_data2};
 pub(crate) enum NCServerMessage {
     InitialData(NodeID, Option<Vec<u8>>),
     JobStatus(NCJobStatus),
+    HeartBeat(bool),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -133,26 +134,13 @@ fn start_node_thread<T: 'static + NCServer + Send>(stream: TcpStream, quit: Arc<
     debug!("Start start_node_thread()");
 
     thread::spawn(move || {
-        match handle_node(stream, node_list, nc_server) {
-            Ok(result) => {
-                match quit.lock() {
-                    Ok(mut quit) => {
-                        *quit = result;
-                    }
-                    Err(e) => {
-                        error!("Error in start_node_thread(), could not acquire lock: {}", e);
-                    }
-                }
-                // Mutex quit is unlocked here
-            }
-            Err(e) => {
-                error!("Error in handle_node(): {} ", e);
-            }
+        if let Err(e) = handle_node(stream, node_list, nc_server, quit) {
+            error!("Error in start_node_thread(), could not acquire lock: {}", e);
         }
     })
 }
 
-fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) -> Result<bool, NCError> {
+fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
     debug!("Start handle_node()");
 
     let request: NCNodeMessage = nc_receive_data(&mut stream)?;
@@ -195,12 +183,18 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 NCJobStatus::Finished => {
                     debug!("Job is done, will exit handle_node()");
                     nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
-                    return Ok(true)
+                    let mut quit = quit.lock()?;
+                    *quit = true;
                 }
             }
         }
         NCNodeMessage::HeartBeat(node_id) => {
             debug!("Got hearbeat from node: {}", node_id);
+
+            let quit = {
+                *(quit.lock()?)
+                // Mutex quit is unlocked here
+            };
 
             let mut node_list = node_list.lock()?;
 
@@ -210,6 +204,8 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 }
             }
             // Mutex node_list is unlocked here
+
+            nc_send_data2(&NCServerMessage::HeartBeat(quit), &mut stream)?;
         }
         NCNodeMessage::HasData(node_id, data) => {
             debug!("Node {} has processed some data and we received the results", node_id);
@@ -220,7 +216,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
         }
     }
 
-    Ok(false)
+    Ok(())
 }
 
 fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> NodeID {
