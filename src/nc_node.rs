@@ -5,7 +5,7 @@ use log::{error, debug};
 
 use serde::{Serialize, Deserialize};
 
-use crate::nc_error::NCError;
+use crate::nc_error::{NCError};
 use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::{NCConfiguration};
 use crate::nc_node_info::{NodeID};
@@ -53,6 +53,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 
     match initial_data {
         NCServerMessage::InitialData(node_id, initial_data) => {
+            debug!("Got node_id: {} and initial data from server", node_id);
             Ok((node_id, initial_data))
         }
         msg => {
@@ -98,7 +99,7 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
     loop {
         debug!("Ask server for new data");
 
-        match get_and_process_data(&mut nc_node, socket_addr, node_id) {
+        match get_and_process_data(&mut nc_node, socket_addr, node_id, duration) {
             Ok(quit) => {
                 if quit { break }
             }
@@ -111,7 +112,7 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
     }
 }
 
-fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID) -> Result<bool, NCError> {
+fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID, duration: Duration) -> Result<bool, NCError> {
     debug!("Start get_and_process_data(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
     let result = nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr)?;
@@ -121,7 +122,8 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
             NCJobStatus::Unfinished(data) => {
                 debug!("New data received from server");
                 let result = nc_node.process_data_from_server(data)?;
-                nc_send_data(&result, &socket_addr).map(|_| false)
+                debug!("Send processed data to server");
+                nc_send_data(&NCNodeMessage::HasData(node_id, result), &socket_addr).map(|_| false)
             }
             NCJobStatus::Waiting => {
                 // The node will not exit here since the job is not 100% done.
@@ -130,7 +132,8 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
                 // One of the nodes can still crash and thus free nodes have to ask the server for more work
                 // from time to time (delay_request_data).
 
-                debug!("Waiting for other nodes to finish...");
+                debug!("Waiting for other nodes to finish (delay_request_data: {})...", duration.as_secs());
+                thread::sleep(duration);
                 Ok(false)
             }
             NCJobStatus::Finished => {
@@ -142,5 +145,4 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
         error!("Error in get_and_process_data(), NCServerMessage missmatch, expected: JobStatus, got: {:?}", result);
         Err(NCError::ServerMsgMismatch)
     }
-
 }

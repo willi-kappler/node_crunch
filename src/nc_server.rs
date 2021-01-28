@@ -1,8 +1,6 @@
-use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
-use std::io::{ErrorKind};
 
 use log::{error, debug};
 
@@ -98,9 +96,6 @@ fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_s
     let listener = TcpListener::bind(socket_addr)?;
     let quit = Arc::new(Mutex::new(false));
     let mut all_threads = Vec::new();
-    let mut timeout_start = Instant::now();
-
-    listener.set_nonblocking(true)?;
 
     // TODO: Maybe use crossbeam::thread::scope
 
@@ -110,16 +105,6 @@ fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_s
                 debug!("Got new connection from node: {}", addr);
                 let handle = start_node_thread(stream, quit.clone(), node_list.clone(), nc_server.clone());
                 all_threads.push(handle);
-            }
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                let diff = Instant::now() - timeout_start;
-                if diff.as_secs() < 60 { // TODO: Make this configurable
-                    thread::sleep(Duration::from_secs(2));
-                    continue
-                }
-
-                debug!("Accept timeout, time to check if job is done");
-                timeout_start = Instant::now();
             }
             Err(e) => {
                 error!("IO error while accepting node connections: {}", e);
@@ -170,7 +155,7 @@ fn start_node_thread<T: 'static + NCServer + Send>(stream: TcpStream, quit: Arc<
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) -> Result<bool, NCError> {
     debug!("Start handle_node()");
 
-    let request: NCNodeMessage =  nc_receive_data(&mut stream)?;
+    let request: NCNodeMessage = nc_receive_data(&mut stream)?;
 
     match request {
         NCNodeMessage::Register => {
@@ -197,18 +182,22 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 nc_server.prepare_data_for_node(node_id)?
             }; // Mutex nc_server is unlocked here
 
-            let quit = data_for_node == NCJobStatus::Finished;
-
-            nc_send_data2(&NCServerMessage::JobStatus(data_for_node), &mut stream)?;
-
-            return Ok(quit)
-        }
-        NCNodeMessage::HasData(node_id, data) => {
-            debug!("Node {} has processed some data and we received the results", node_id);
-
-            let mut nc_server = nc_server.lock()?;
-            nc_server.process_data_from_node(node_id, &data).map(|_| false)?;
-            // Mutex nc_server is unlocked here
+            match data_for_node {
+                NCJobStatus::Unfinished(data) => {
+                    debug!("Send data to node");
+                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Unfinished(data)), &mut stream)?;
+                    debug!("Data has been sent to node");
+                }
+                NCJobStatus::Waiting => {
+                    debug!("Waiting for other nodes to finish");
+                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)?;
+                }
+                NCJobStatus::Finished => {
+                    debug!("Job is done, will exit handle_node()");
+                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
+                    return Ok(true)
+                }
+            }
         }
         NCNodeMessage::HeartBeat(node_id) => {
             debug!("Got hearbeat from node: {}", node_id);
@@ -221,6 +210,13 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 }
             }
             // Mutex node_list is unlocked here
+        }
+        NCNodeMessage::HasData(node_id, data) => {
+            debug!("Node {} has processed some data and we received the results", node_id);
+
+            let mut nc_server = nc_server.lock()?;
+            nc_server.process_data_from_node(node_id, &data)?;
+            // Mutex nc_server is unlocked here
         }
     }
 
