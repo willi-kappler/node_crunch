@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::{thread, time::Duration};
 
-use log::{error, debug};
+use log::{error, info, debug};
 
 use serde::{Serialize, Deserialize};
 
@@ -17,6 +17,7 @@ pub(crate) enum NCNodeMessage {
     NeedsData(NodeID),
     HasData(NodeID, Vec<u8>),
     HeartBeat(NodeID),
+    NodeQuit(NodeID),
 }
 
 // TODO: Generic trait, U for data in, V for data out
@@ -44,7 +45,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     heartbeat_handle.join().map_err(|_| NCError::ThreadJoin)?;
 
-    debug!("Exit nc_start_node()");
+    info!("Job done, exit now");
     Ok(())
 }
 
@@ -55,7 +56,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 
     match initial_data {
         NCServerMessage::InitialData(node_id, initial_data) => {
-            debug!("Got node_id: {} and initial data from server", node_id);
+            info!("Got node_id: {} and initial data from server", node_id);
             Ok((node_id, initial_data))
         }
         msg => {
@@ -69,7 +70,6 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
     debug!("Start start_hearbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration);
 
     let duration = Duration::from_secs(heartbeat_duration);
-    let mut error_counter = 0;
 
     thread::spawn(move || {
         loop {
@@ -77,20 +77,15 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
 
             match nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
                 Ok(NCServerMessage::HeartBeat(quit)) => {
-                    error_counter = 0;
                     if quit { break }
                 }
                 Ok(msg) => {
                     error!("Error in start_heartbeat_thread(), unexpected server message: {:?}", msg);
+                    break
                 }
                 Err(e) => {
                     error!("Error in start_heartbeat_thread(): {}", e);
-
-                    error_counter += 1;
-                    if error_counter >= 10 { // TODO: Make this configurable
-                        error!("Error in start_heartbeat_thread(), error_counter limit exceeded: {}", error_counter);
-                        break;
-                    }
+                    break;
                 }
             }
         }
@@ -111,8 +106,7 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
             }
             Err(e) => {
                 error!("Error in get_and_process_data(): {}", e);
-                debug!("Will try again in {} seconds (delay_request_data)", config.delay_request_data);
-                thread::sleep(duration);
+                break;
             }
         }
     }
@@ -145,7 +139,9 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
                 Ok(false)
             }
             NCJobStatus::Finished => {
-                debug!("Job is done, exit now.");
+                debug!("Job is done, node will quit.");
+                // This gives the server a chance to exit the main loop
+                nc_send_data(&NCNodeMessage::NodeQuit(node_id), &socket_addr).map(|_| false)?;
                 Ok(true)
             }
         }
