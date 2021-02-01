@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
 use std::{thread};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::time::{Instant, Duration};
 
 use log::{error, info, debug};
-
 use serde::{Serialize, Deserialize};
-use std::time::{Instant, Duration};
+use crossbeam::{self, thread::Scope};
 
 use crate::{nc_error::{NCError}};
 use crate::nc_node::{NCNodeMessage};
@@ -40,24 +40,17 @@ pub trait NCServer {
     fn finish_job(&mut self);
 }
 
-pub fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
+pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     debug!("Start nc_start_server()");
 
     let time_start = Instant::now();
     let nc_server = Arc::new(Mutex::new(nc_server));
-    let mut node_list = Arc::new(Mutex::new(Vec::<NCNodeInfo>::new()));
+    let node_list = Arc::new(Mutex::new(Vec::<NCNodeInfo>::new()));
 
-    let heartbeat_handle = start_heartbeat_thread(2 * config.heartbeat, node_list.clone(), nc_server.clone());
-
-    start_main_loop(node_list.clone(), nc_server.clone(), config)?;
-
-    {
-        // Clear node_list so that the heartbeat_thread can exit
-        let mut node_list = node_list.lock()?;
-        node_list.clear();
-    } // Mutex node_list is unlocked here
-
-    heartbeat_handle.join().map_err(|_| NCError::ThreadJoin)?;
+    crossbeam::scope(|scope|{
+        start_heartbeat_thread(scope, 2 * config.heartbeat, node_list.clone(), nc_server.clone());
+        start_main_loop(scope, node_list.clone(), nc_server.clone(), config);
+    }).unwrap();
 
     info!("Call finish_job() for nc_server");
 
@@ -73,10 +66,10 @@ pub fn nc_start_server<T: 'static + NCServer + Send>(nc_server: T, config: NCCon
     Ok(())
 }
 
-fn start_heartbeat_thread<T: 'static + NCServer + Send>(heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) -> thread::JoinHandle<()> {
+fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
 
-    thread::spawn(move || {
+    scope.spawn(move |_| {
         loop {
             thread::sleep(Duration::from_secs(heartbeat_duration));
 
@@ -90,8 +83,8 @@ fn start_heartbeat_thread<T: 'static + NCServer + Send>(heartbeat_duration: u64,
                 }
             }
         }
-      debug!("Exit start_heartbeat_thread() main loop");
-    })
+        debug!("Exit start_heartbeat_thread() main loop");
+    });
 }
 
 fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList, nc_server: &Arc<Mutex<T>>) -> Result<bool, NCError> {
@@ -112,15 +105,14 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
     // Mutex node_list is unlocked here
 }
 
-fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, config: NCConfiguration) -> Result<(), NCError> {
+fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, config: NCConfiguration) {
     debug!("Start start_main_loop()");
 
-    let ip_addr: IpAddr = "0.0.0.0".parse()?; // TODO: Make this configurable
+    let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable
     let socket_addr = SocketAddr::new(ip_addr, config.port);
 
-    let listener = TcpListener::bind(socket_addr)?;
+    let listener = TcpListener::bind(socket_addr).unwrap();
     let quit = Arc::new(Mutex::new(false));
-    let mut all_threads = Vec::new();
 
     // TODO: Maybe use crossbeam::thread::scope
 
@@ -128,40 +120,33 @@ fn start_main_loop<T: 'static + NCServer + Send>(node_list: NCNodeInfoList, nc_s
         match listener.accept() {
             Ok((stream, addr)) => {
                 debug!("Got new connection from node: {}", addr);
-                let handle = start_node_thread(stream, quit.clone(), node_list.clone(), nc_server.clone());
-                all_threads.push(handle);
+                start_node_thread(scope, stream, quit.clone(), node_list.clone(), nc_server.clone());
             }
             Err(e) => {
                 error!("IO error while accepting node connections: {}", e);
-                return Err(NCError::IOError(e))
             }
         }
 
-        if *(quit.lock()?) {
+        if *(quit.lock().unwrap()) {
             debug!("Quit main loop");
             break
         } // Mutex quit is unlocked here
     }
 
-    debug!("Waiting for all threads to finish...");
-
-    for handle in all_threads {
-        if let Err(e) = handle.join() {
-            error!("Error in start_main_loop(), could not join thread: {:?}", e);
-        }
-    }
-
-    Ok(())
+    // Clear node_list so that the heartbeat_thread can exit
+    let mut node_list = node_list.lock().unwrap();
+    node_list.clear();
+    // Mutex node_list is unlocked here
 }
 
-fn start_node_thread<T: 'static + NCServer + Send>(stream: TcpStream, quit: Arc<Mutex<bool>>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) -> thread::JoinHandle<()> {
+fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream, quit: Arc<Mutex<bool>>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_node_thread()");
 
-    thread::spawn(move || {
+    scope.spawn(|_| {
         if let Err(e) = handle_node(stream, node_list, nc_server, quit) {
             error!("Error in start_node_thread(), could not acquire lock: {}", e);
         }
-    })
+    });
 }
 
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {

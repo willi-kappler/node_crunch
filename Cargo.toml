@@ -12,6 +12,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
 rand = "0.7"
+crossbeam = "0.8"
 
 [profile.release]
 lto = true
