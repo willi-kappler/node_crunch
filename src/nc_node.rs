@@ -4,6 +4,7 @@ use std::{thread, time::Duration};
 use log::{error, info, debug};
 
 use serde::{Serialize, Deserialize};
+use crossbeam::{self, thread::Scope};
 
 use crate::nc_error::{NCError};
 use crate::nc_server::{NCServerMessage, NCJobStatus};
@@ -38,12 +39,10 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     nc_node.set_initial_data(node_id, initial_data)?;
 
-    let heartbeat_duration = config.heartbeat;
-    let heartbeat_handle = start_hearbeat_thread(node_id, socket_addr, heartbeat_duration);
-
-    start_main_loop(nc_node, socket_addr, config, node_id);
-
-    heartbeat_handle.join().map_err(|_| NCError::ThreadJoin)?;
+    crossbeam::scope(|scope|{
+        start_hearbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat));
+        start_main_loop(nc_node, socket_addr, config, node_id);
+    }).unwrap();
 
     info!("Job done, exit now");
     Ok(())
@@ -66,14 +65,12 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
     }
 }
 
-fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: u64) -> thread::JoinHandle<()> {
-    debug!("Start start_hearbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration);
+fn start_hearbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration) {
+    debug!("Start start_hearbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 
-    let duration = Duration::from_secs(heartbeat_duration);
-
-    thread::spawn(move || {
+    scope.spawn(move |_| {
         loop {
-            thread::sleep(duration);
+            thread::sleep(heartbeat_duration);
 
             match nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
                 Ok(NCServerMessage::HeartBeat(quit)) => {
@@ -81,15 +78,13 @@ fn start_hearbeat_thread(node_id: NodeID, socket_addr: SocketAddr, heartbeat_dur
                 }
                 Ok(msg) => {
                     error!("Error in start_heartbeat_thread(), unexpected server message: {:?}", msg);
-                    break
                 }
                 Err(e) => {
                     error!("Error in start_heartbeat_thread(): {}", e);
-                    break;
                 }
             }
         }
-    })
+    });
 }
 
 fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
@@ -106,7 +101,8 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
             }
             Err(e) => {
                 error!("Error in get_and_process_data(): {}", e);
-                break;
+                debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
+                thread::sleep(duration);
             }
         }
     }
@@ -134,7 +130,7 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
                 // One of the nodes can still crash and thus free nodes have to ask the server for more work
                 // from time to time (delay_request_data).
 
-                debug!("Waiting for other nodes to finish (delay_request_data: {})...", duration.as_secs());
+                debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", duration.as_secs());
                 thread::sleep(duration);
                 Ok(false)
             }
