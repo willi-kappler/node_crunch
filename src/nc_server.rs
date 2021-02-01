@@ -54,9 +54,7 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 
     info!("Call finish_job() for nc_server");
 
-    {
-        nc_server.lock()?.finish_job();
-    } // Mutex nc_server is unlocked here
+    nc_server.lock()?.finish_job();
 
     let time_taken = (Instant::now() - time_start).as_secs_f64();
 
@@ -68,10 +66,11 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
+    let duration = Duration::from_secs(heartbeat_duration);
 
     scope.spawn(move |_| {
         loop {
-            thread::sleep(Duration::from_secs(heartbeat_duration));
+            thread::sleep(duration);
 
             match check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
                 Ok(quit) => {
@@ -79,7 +78,6 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
                 }
                 Err(e) => {
                     error!("Error in check_heartbeat(): {}", e);
-                    break;
                 }
             }
         }
@@ -114,8 +112,6 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
     let listener = TcpListener::bind(socket_addr).unwrap();
     let quit = Arc::new(Mutex::new(false));
 
-    // TODO: Maybe use crossbeam::thread::scope
-
     loop {
         match listener.accept() {
             Ok((stream, addr)) => {
@@ -144,7 +140,7 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
 
     scope.spawn(|_| {
         if let Err(e) = handle_node(stream, node_list, nc_server, quit) {
-            error!("Error in start_node_thread(), could not acquire lock: {}", e);
+            error!("Error in handle_node(): {}", e);
         }
     });
 }
@@ -194,7 +190,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                     nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
                     let mut quit = quit.lock()?;
                     *quit = true;
-                }
+                } // Mutex quit is unlocked here
             }
         }
         NCNodeMessage::HeartBeat(node_id) => {
