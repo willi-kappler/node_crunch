@@ -194,7 +194,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
             }
         }
         NCNodeMessage::HeartBeat(node_id) => {
-            debug!("Got hearbeat from node: {}", node_id);
+            debug!("Got heartbeat from node: {}", node_id);
 
             {
                 let mut node_list = node_list.lock()?;

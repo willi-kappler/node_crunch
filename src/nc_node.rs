@@ -40,7 +40,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     nc_node.set_initial_data(node_id, initial_data)?;
 
     crossbeam::scope(|scope|{
-        start_hearbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat));
+        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat));
         start_main_loop(nc_node, socket_addr, config, node_id);
     }).unwrap();
 
@@ -59,14 +59,14 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
             Ok((node_id, initial_data))
         }
         msg => {
-            error!("Error in get_initial_data(), NCServerMessage missmatch, expected: InitialData, got: {:?}", msg);
+            error!("Error in get_initial_data(), NCServerMessage mismatch, expected: InitialData, got: {:?}", msg);
             Err(NCError::ServerMsgMismatch)
         }
     }
 }
 
-fn start_hearbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration) {
-    debug!("Start start_hearbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
+fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration) {
+    debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 
     scope.spawn(move |_| {
         loop {
@@ -142,7 +142,7 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
             }
         }
     } else {
-        error!("Error in get_and_process_data(), NCServerMessage missmatch, expected: JobStatus, got: {:?}", result);
+        error!("Error in get_and_process_data(), NCServerMessage mismatch, expected: JobStatus, got: {:?}", result);
         Err(NCError::ServerMsgMismatch)
     }
 }
