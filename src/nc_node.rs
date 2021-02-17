@@ -4,6 +4,8 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::{thread, time::Duration};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{error, info, debug};
 
@@ -63,14 +65,14 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     let ip_addr: IpAddr = config.address.parse()?;
     let socket_addr = SocketAddr::new(ip_addr, config.port);
-
+    let job_done = Arc::new(AtomicBool::new(false));
     let (node_id, initial_data) = get_initial_data(&socket_addr)?;
 
     nc_node.set_initial_data(node_id, initial_data)?;
 
     crossbeam::scope(|scope|{
-        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat));
-        start_main_loop(nc_node, socket_addr, config, node_id);
+        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat), job_done.clone());
+        start_main_loop(nc_node, socket_addr, config, node_id, job_done.clone());
     }).unwrap();
 
     info!("Job done, exit now");
@@ -106,7 +108,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 /// Otherwise the thread continues to send heartbeats every n seconds.
 /// If the server respondes with a different message an error is logged. The error is also logged in case of an IO error.
 /// The heartbeat thread still tries to contact the server after a sleep duration of n seconds.
-fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration) {
+fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration, job_done: Arc<AtomicBool>) {
     debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 
     scope.spawn(move |_| {
@@ -124,6 +126,10 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
                     error!("Error in nc_send_receive_data(): {}", e);
                 }
             }
+
+            if job_done.load(Ordering::Relaxed) {
+                break
+            }
         }
     });
 }
@@ -132,9 +138,10 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
 /// sends a NCJobStatus::Finished message to this node.
 /// If there is an error this node will wait n seconds before it trys to reconnect to the server.
 /// The delay time can be configures in the NCConfiguration data structure.
-fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID) {
+fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID, job_done: Arc<AtomicBool>) {
     debug!("Start start_main_loop(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
+    let mut retry_counter = config.retry_counter;
     let duration = Duration::from_secs(config.delay_request_data);
 
     loop {
@@ -142,13 +149,27 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
 
         match get_and_process_data(&mut nc_node, socket_addr, node_id, duration) {
             Ok(quit) => {
-                if quit { break }
+                if quit {
+                    job_done.store(true, Ordering::Relaxed);
+                }
             }
             Err(e) => {
-                error!("Error in get_and_process_data(): {}", e);
+                error!("Error in get_and_process_data(): {}, retry counter: {}", e, retry_counter);
+
+                retry_counter -= 1;
+
+                if retry_counter == 0 {
+                    debug!("Retry counter is zero, will exit now");
+                    job_done.store(true, Ordering::Relaxed);
+                }
+
                 debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
                 thread::sleep(duration);
             }
+        }
+
+        if job_done.load(Ordering::Relaxed) {
+            break
         }
     }
 
