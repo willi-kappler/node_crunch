@@ -14,7 +14,7 @@ pub fn nc_encode_data<T: Serialize>(data: &T) -> Result<Vec<u8>, NCError> {
 }
 
 /// This function dencodes data from a reference to a Vec<u8> to T.
-pub fn nc_decode_data<'de, T: Deserialize<'de>>(data: &'de &[u8]) -> Result<T, NCError> {
+pub fn nc_decode_data<'de, T: Deserialize<'de>>(data: &'de [u8]) -> Result<T, NCError> {
     deserialize(data).map_err(|e| NCError::Deserialize(e))
 }
 
