@@ -9,6 +9,7 @@
 //!     in here.
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
@@ -87,10 +88,11 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
     let time_start = Instant::now();
     let nc_server = Arc::new(Mutex::new(nc_server));
     let node_list = Arc::new(Mutex::new(Vec::<NCNodeInfo>::new()));
+    let quit = Arc::new(AtomicBool::new(false));
 
     crossbeam::scope(|scope|{
-        start_heartbeat_thread(scope, 2 * config.heartbeat, node_list.clone(), nc_server.clone());
-        start_main_loop(scope, node_list.clone(), nc_server.clone(), config);
+        start_heartbeat_thread(scope, 2 * config.heartbeat, node_list.clone(), nc_server.clone(), quit.clone());
+        start_main_loop(scope, node_list.clone(), nc_server.clone(), config, quit.clone());
     }).unwrap();
 
     info!("Call finish_job() for nc_server");
@@ -107,7 +109,8 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 
 /// This function starts the heartbeat check thread in an endless loop.
 /// If the job is done the loop will exit.
-fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
+fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64,
+    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<AtomicBool>) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
 
     scope.spawn(move |_| {
@@ -115,14 +118,14 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
         loop {
             thread::sleep(duration);
 
-            match check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
-                Ok(quit) => {
-                    if quit { break }
-                }
-                Err(e) => {
-                    error!("Error in check_heartbeat(): {}", e);
-                }
+            if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
+                error!("Error in check_heartbeat(): {}", e);
             }
+
+            if quit.load(Ordering::Relaxed) {
+                break
+            }
+
         }
         debug!("Exit start_heartbeat_thread() main loop");
     });
@@ -130,14 +133,11 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
 
 /// This function checks all the registered nodes. If the heartbeat time stamp is too old (> 2 * hartbeat in NCConfiguration) then
 /// the server trait method heartbeat_timeout() is called where the node should be marked as offline.
-fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList, nc_server: &Arc<Mutex<T>>) -> Result<bool, NCError> {
+fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList,
+    nc_server: &Arc<Mutex<T>>) -> Result<(), NCError> {
     debug!("Start check_heartbeat(), heartbeat_duration: {}", heartbeat_duration);
 
     let node_list = node_list.lock()?;
-
-    // TODO: change this! If no node has registered yet the list will be empty and the thread will finish
-    // although the job is not done yet!
-    if node_list.is_empty() { return Ok(true) }
 
     for node in node_list.iter() {
         if node.heartbeat_invalid(heartbeat_duration) {
@@ -146,36 +146,34 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
         }
     }
 
-    Ok(false)
+    Ok(())
     // Mutex node_list is unlocked here
 }
 
 /// This function starts the main loop and the tcp server.
 /// If the job is done the loop will exit.
-fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, config: NCConfiguration) {
+fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList,
+    nc_server: Arc<Mutex<T>>, config: NCConfiguration, quit: Arc<AtomicBool>) {
     debug!("Start start_main_loop()");
 
     let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable
     let socket_addr = SocketAddr::new(ip_addr, config.port);
-
     let listener = TcpListener::bind(socket_addr).unwrap();
-    let quit = Arc::new(Mutex::new(false));
 
     loop {
         match listener.accept() {
             Ok((stream, addr)) => {
                 debug!("Got new connection from node: {}", addr);
-                start_node_thread(scope, stream, quit.clone(), node_list.clone(), nc_server.clone());
+                start_node_thread(scope, stream, node_list.clone(), nc_server.clone(), quit.clone());
             }
             Err(e) => {
                 error!("IO error while accepting node connections: {}", e);
             }
         }
 
-        if *(quit.lock().unwrap()) {
-            debug!("Quit main loop");
+        if quit.load(Ordering::Relaxed) {
             break
-        } // Mutex quit is unlocked here
+        }
     }
 
     // Clear node_list so that the heartbeat_thread can exit.
@@ -186,7 +184,8 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
 }
 
 /// This function starts a new thread for each node that sends a message to the server and calls the handle_node() function.
-fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream, quit: Arc<Mutex<bool>>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
+fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream,
+    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<AtomicBool>) {
     debug!("Start start_node_thread()");
 
     scope.spawn(|_| {
@@ -207,7 +206,8 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
 ///   The server trait function process_data_from_node() is called here.
 /// - NCNodeMessage::NodeQuit: the node has received the server message NCJobStatus::Finished and confirms that the job is done. This is needed so that the server has a chance to
 ///   wait for all the threads to finish.
-fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
+fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
+    nc_server: Arc<Mutex<T>>, quit: Arc<AtomicBool>) -> Result<(), NCError> {
     debug!("Start handle_node()");
 
     let request: NCNodeMessage = nc_receive_data(&mut stream)?;
@@ -250,9 +250,8 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 NCJobStatus::Finished => {
                     debug!("Job is done, will exit handle_node()");
                     nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
-                    let mut quit = quit.lock()?;
-                    *quit = true;
-                } // Mutex quit is unlocked here
+                    quit.store(true, Ordering::Relaxed)
+                }
             }
         }
         NCNodeMessage::HeartBeat(node_id) => {
@@ -269,12 +268,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
                 // Mutex node_list is unlocked here
             }
 
-            let quit = {
-                *(quit.lock()?)
-                // Mutex quit is unlocked here
-            };
-
-            nc_send_data2(&NCServerMessage::HeartBeat(quit), &mut stream)?;
+            nc_send_data2(&NCServerMessage::HeartBeat(quit.load(Ordering::Relaxed)), &mut stream)?;
         }
         NCNodeMessage::HasData(node_id, data) => {
             debug!("Node {} has processed some data and we received the results", node_id);
