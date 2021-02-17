@@ -1,7 +1,7 @@
-use std::time::{Instant};
+use std::time::Instant;
 use std::fmt;
 
-use rand::{random};
+use rand::random;
 use serde::{Serialize, Deserialize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]

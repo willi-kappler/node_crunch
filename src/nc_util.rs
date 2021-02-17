@@ -3,7 +3,7 @@ use std::net::{SocketAddr, TcpStream};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use bincode::{deserialize, serialize, serialize_into, deserialize_from};
 
-use crate::nc_error::{NCError};
+use crate::nc_error::NCError;
 
 pub fn nc_encode_data<T: Serialize>(data: &T) -> Result<Vec<u8>, NCError> {
     serialize(data).map_err(|e| NCError::Serialize(e))

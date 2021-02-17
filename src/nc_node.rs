@@ -6,10 +6,10 @@ use log::{error, info, debug};
 use serde::{Serialize, Deserialize};
 use crossbeam::{self, thread::Scope};
 
-use crate::nc_error::{NCError};
+use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
-use crate::nc_config::{NCConfiguration};
-use crate::nc_node_info::{NodeID};
+use crate::nc_config::NCConfiguration;
+use crate::nc_node_info::NodeID;
 use crate::nc_util::{nc_send_receive_data, nc_send_data};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,7 +80,7 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
                     error!("Error in start_heartbeat_thread(), unexpected server message: {:?}", msg);
                 }
                 Err(e) => {
-                    error!("Error in start_heartbeat_thread(): {}", e);
+                    error!("Error in nc_send_receive_data(): {}", e);
                 }
             }
         }

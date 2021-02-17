@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use std::{thread};
+use std::thread;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
 
@@ -7,9 +7,9 @@ use log::{error, info, debug};
 use serde::{Serialize, Deserialize};
 use crossbeam::{self, thread::Scope};
 
-use crate::{nc_error::{NCError}};
-use crate::nc_node::{NCNodeMessage};
-use crate::nc_config::{NCConfiguration};
+use crate::nc_error::NCError;
+use crate::nc_node::NCNodeMessage;
+use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::{NCNodeInfo, NodeID};
 use crate::nc_util::{nc_receive_data, nc_send_data2};
 
@@ -66,9 +66,9 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
-    let duration = Duration::from_secs(heartbeat_duration);
 
     scope.spawn(move |_| {
+        let duration = Duration::from_secs(heartbeat_duration);
         loop {
             thread::sleep(duration);
 
