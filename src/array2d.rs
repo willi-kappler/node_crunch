@@ -1,8 +1,28 @@
+use std::{error, fmt};
+
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug)]
 pub enum Array2DError {
     DimensionMismatch,
 }
+
+impl fmt::Display for Array2DError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Array2DError::DimensionMismatch => write!(f, "Dimensions do not match: "),
+        }
+    }
+}
+
+impl error::Error for Array2DError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Array2DError::DimensionMismatch => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Array2D<T> {
     width: u64,

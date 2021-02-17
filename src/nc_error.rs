@@ -1,16 +1,33 @@
+//! This module contains the common error type for server and node.
+
 use std::{error, fmt, io, net, sync};
 
+use crate::{NodeID, array2d::Array2DError};
+
+/// This data structure contains all error codes for the server and the nodes.
 #[derive(Debug)]
 pub enum NCError {
+    /// Parsing the IP address went wrong.
     IPAddrParse(net::AddrParseError),
+    /// Common IO error, usually network related.
     IOError(io::Error),
+    /// Data could not be serialized for sending over the network.
     Serialize(bincode::Error),
+    /// Data comming from the network could not be deserialized.
     Deserialize(bincode::Error),
+    /// The bincode crate has its own error.
     Bincode(Box<bincode::ErrorKind>),
+    /// The node expected a specifig message from the server but got s.th. totally different.
     ServerMsgMismatch,
+    /// The server expected a specific message from the node but got s.th. totally different.
     NodeMsgMismatch,
-    ThreadJoin,
+    /// A different node id was expected. Expected first node id, found second node id.
+    NodeIDMismatch(NodeID, NodeID),
+    /// Mutex could not be locked or a thread paniced while holding the lock.
     MutexPoison,
+    /// An error using the utility data structure Array2D.
+    Array2D(Array2DError),
+    /// Custom user defined error. This needs to be replaced in the future with Box<dyn Error> or s.th. similar.
     Custom(u32),
 }
 
@@ -24,8 +41,9 @@ impl fmt::Display for NCError {
             NCError::Bincode(e) => write!(f, "Bincode error: {}", e),
             NCError::ServerMsgMismatch => write!(f, "Server message mismatch error"),
             NCError::NodeMsgMismatch => write!(f, "Node message mismatch error"),
-            NCError::ThreadJoin => write!(f, "Error while joining thread"),
-            NCError::MutexPoison => write!(f, "Error while locking mutex"),
+            NCError::NodeIDMismatch(id1, id2) => write!(f, "Node id mismatch error, expected: {}, found: {}", id1, id2),
+            NCError::MutexPoison => write!(f, "Mutex poisson error"),
+            NCError::Array2D(e) => write!(f, "Array2D error: {}", e),
             NCError::Custom(e) => write!(f, "Custom user defined error: {}", e),
         }
     }
@@ -41,8 +59,9 @@ impl error::Error for NCError {
             NCError::Bincode(e) => Some(e),
             NCError::ServerMsgMismatch => None,
             NCError::NodeMsgMismatch => None,
-            NCError::ThreadJoin => None,
+            NCError::NodeIDMismatch(_, _) => None,
             NCError::MutexPoison => None,
+            NCError::Array2D(e) => Some(e),
             NCError::Custom(_) => Some(self),
         }
     }
@@ -66,8 +85,10 @@ impl From<net::AddrParseError> for NCError {
     }
 }
 
+
 impl<T> From<sync::PoisonError<sync::MutexGuard<'_, T>>> for NCError {
     fn from(_: sync::PoisonError<sync::MutexGuard<'_, T>>) -> NCError {
         NCError::MutexPoison
     }
 }
+

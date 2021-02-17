@@ -1,12 +1,17 @@
+//! This module contains the configuration for the server and the nodes.
+//! Usually code for the server and the node is shared.
 
-
+/// This data structure contains the configuration for the server and the node.
 #[derive(Debug, Clone)]
 pub struct NCConfiguration{
+    /// IP address of the server
     pub address: String,
+    /// Port used by the server
     pub port: u16,
-    // pub reconnect_wait: u64,
-    // pub server_timeout: u64,
+    /// Nodes have to send a heartbeat every n seconds or they will be marked as offline.
+    /// The function heartbeat_timeout(node_id) with the coresponding node ID is called.
     pub heartbeat: u64,
+    /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
     pub delay_request_data: u64,
 }
 
@@ -15,9 +20,7 @@ impl Default for NCConfiguration {
         NCConfiguration {
             address: "127.0.0.1".to_string(),
             port: 9000,
-            // reconnect_wait: 10,
-            // server_timeout: 60 * 10,
-            heartbeat: 60, // Check every n seconds
+            heartbeat: 60,
             delay_request_data: 60,
         }
     }

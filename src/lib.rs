@@ -1,12 +1,14 @@
-
+//! NodeCrunsh is a crate that allows to distribute computations among multiple nodes.
+//! The user of this crate has to implement one trait for the server and one trait for the nodes.
+//! Usually the code for the server and the node is inside the same binary and the choice if to
+//! run in server mode or node mode is done via configuration or command line argument.
+//! See some of the programms in the example folders.
 
 // TODO:
-// - Add TLS / encryption / secure connection
+// - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
 // - Add authentication ?
-// - Add payload to NodeNeedsData() ?
 // - Add error_counter, if too high exit both node and server
 // - Speed up serde: https://github.com/serde-rs/bytes
-
 
 mod nc_server;
 mod nc_node;
