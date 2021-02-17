@@ -1,4 +1,4 @@
-//! This module contains the nc node data structure and helper functions
+//! This module contains the nc node message, trait and helper functions
 //! To use the node you have to implement the NCNode trait that has two functions:
 //! set_initial_data() and process_data_from_server()
 
@@ -20,6 +20,7 @@ use crate::nc_util::{nc_send_receive_data, nc_send_data};
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCNodeMessage {
     /// Register this node with the server. The server will assign a new node id to this node and answers with a NCServerMessage::InitialData message.
+    /// This is the first thing every node has to do!
     Register,
     /// This node needs new data to process. The server answers with a JobStatus message.
     NeedsData(NodeID),
@@ -101,6 +102,10 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 /// It does this every n seconds which can be configured in the NCConfiguration data structure.
 /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
 /// and gives another node the same data chunk to process.
+/// If the server sends a heartbeat response with quit == true that means that the job is done and the heartbeat thread can exit.
+/// Otherwise the thread continues to send heartbeats every n seconds.
+/// If the server respondes with a different message an error is logged. The error is also logged in case of an IO error.
+/// The heartbeat thread still tries to contact the server after a sleep duration of n seconds.
 fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration) {
     debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 

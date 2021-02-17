@@ -1,3 +1,13 @@
+//! This module contains the nc server message, trait and helper functions
+//! To use the server you have to implement the NCServer trait that has five functions:
+//! initial_data(): This function is called once for every node when the node registers with the server.
+//! prepare_data_for_node(): This function is called when the node needs new data to process.
+//! process_data_from_node(): This function is called when the node is done with processing the data and has sent the result back to the server.
+//! heartbeat_timeout(): This function is called when the node has missed a heartbeat, usually the node is then marked as offline and the chunk
+//!     of data for that node is sent to another node.
+//! finish_job(): This function is called when the job is done and all the threads are finished. Usually you want to save the results to disk
+//!     in here.
+
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
@@ -13,33 +23,64 @@ use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::{NCNodeInfo, NodeID};
 use crate::nc_util::{nc_receive_data, nc_send_data2};
 
+///! This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage {
+    /// When the node registeres for the first time with the NCNodeMessage::Register message the server assigns a new node id
+    /// and sends some optional initial data to the node.
     InitialData(NodeID, Option<Vec<u8>>),
+    /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
+    /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus),
+    /// This is the response message from the server when a node sends the heartbeat message NCNodeMessage::HeartBeat.
+    /// If quit == true this means that the job is done and the node heartbeat thread can exit.
     HeartBeat(bool),
 }
 
+/// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
+/// a node request new data via the NCNodeMessage::NeedsData message.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum NCJobStatus {
+    /// The job is not done yet and the node has to process the data the server sends to it.
     Unfinished(Vec<u8>),
+    /// The server is still waiting for other nodes to finish the job. This means that all the work has already been distributed to all the nodes
+    /// and the server sends this message to the remaining nodes. It does this because some of the processing nodes can still crash, so that its work
+    /// has to be done by a waiting node.
     Waiting,
+    /// Now all nodes are finished and the job is done. The server sends this message to all the nodes that request new data.
     Finished,
 }
 
 type NCNodeInfoList = Arc<Mutex<Vec<NCNodeInfo>>>;
 
 // TODO: Generic trait, U for data in, V for data out
+/// This is the trait that you have to implement in order to start the server.
 pub trait NCServer {
+    /// This function is called once for every new node that registers with the server using the NCNodeMessage::Register message.
+    /// It may prepare some initial data that is common for all nodes at the beginning of the job.
     fn initial_data(&mut self) -> Result<Option<Vec<u8>>, NCError> {
         Ok(None)
     }
+    /// This function is called when the node requests new data with the NCNodeMessage::NeedsData message.
+    /// Its the servers taks to prepare the data for each node individually.
+    /// Usually the server will have an internal data structure containing all the registered nodes.
+    /// According to the status of the job this function returns a NCJobStatus value:
+    /// Unfinished, Waiting or Finished.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
+    /// When one node is done processing the data from the server it will send the result back to the server and then this function is called.
     fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
+    /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heatbeat value in the NCConfiguration)
+    /// then this function is called with the corresponding node id and the node should marked as offline in this function.
     fn heartbeat_timeout(&mut self, node_id: NodeID);
+    /// When all the nodes are done with processing and all internal threads are also finished then this function is called.
+    /// Usually you want to save all the results to disk and optionally you can write an e-mail to the user to get his a** off the couch
+    /// and start writing a paper for his / her PhD.
     fn finish_job(&mut self);
 }
 
+/// This is the main function that you call when you start the server. It expects your custom data structure that implements the NCServer trait
+/// and a configuration.
+/// Once the job is done the server trait method finish_job() is called here.
 pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     debug!("Start nc_start_server()");
 
@@ -64,6 +105,8 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
     Ok(())
 }
 
+/// This function starts the heartbeat check thread in an endless loop.
+/// If the job is done the loop will exit.
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
 
@@ -85,11 +128,15 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
     });
 }
 
+/// This function checks all the registered nodes. If the heartbeat time stamp is too old (> 2 * hartbeat in NCConfiguration) then
+/// the server trait method heartbeat_timeout() is called where the node should be marked as offline.
 fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList, nc_server: &Arc<Mutex<T>>) -> Result<bool, NCError> {
     debug!("Start check_heartbeat(), heartbeat_duration: {}", heartbeat_duration);
 
     let node_list = node_list.lock()?;
 
+    // TODO: change this! If no node has registered yet the list will be empty and the thread will finish
+    // although the job is not done yet!
     if node_list.is_empty() { return Ok(true) }
 
     for node in node_list.iter() {
@@ -103,6 +150,8 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
     // Mutex node_list is unlocked here
 }
 
+/// This function starts the main loop and the tcp server.
+/// If the job is done the loop will exit.
 fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, config: NCConfiguration) {
     debug!("Start start_main_loop()");
 
@@ -129,12 +178,14 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
         } // Mutex quit is unlocked here
     }
 
-    // Clear node_list so that the heartbeat_thread can exit
+    // Clear node_list so that the heartbeat_thread can exit.
+    // Change this!
     let mut node_list = node_list.lock().unwrap();
     node_list.clear();
     // Mutex node_list is unlocked here
 }
 
+/// This function starts a new thread for each node that sends a message to the server and calls the handle_node() function.
 fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream, quit: Arc<Mutex<bool>>, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>) {
     debug!("Start start_node_thread()");
 
@@ -145,6 +196,17 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
     });
 }
 
+/// This function handles the message that was sent from a node. It can be on of these types:
+/// - NCNodeMessage::Register: every new node has to register first, the server then assigns a new node id and sends some optional initial data back to the node with the
+///   NCServerMessage::InitialData message. The server trait function initial_data() is called here.
+/// - NCNodeMessage::NeedsData: the node needs some data to process and depending on the job state the server answers this request with a NCServerMessage::JobStatus message.
+///   The server trait function prepare_data_for_node() is called here.
+/// - NCNodeMessage::HeartBeat: the node sends a heartbeat message and the server updates the internal node list with the corresponging current time stamp.
+///   The server answers with a NCServerMessage::HeartBeat message and sets quit == true if the job is done.
+/// - NCNodeMessage::HasData: the node has finished processing the data and has sent the result back to the server.
+///   The server trait function process_data_from_node() is called here.
+/// - NCNodeMessage::NodeQuit: the node has received the server message NCJobStatus::Finished and confirms that the job is done. This is needed so that the server has a chance to
+///   wait for all the threads to finish.
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, quit: Arc<Mutex<bool>>) -> Result<(), NCError> {
     debug!("Start handle_node()");
 
@@ -229,6 +291,7 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList, nc
     Ok(())
 }
 
+/// This function genreates a new and unique node id for a new node that has just registered with the server.
 fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> NodeID {
     let mut new_id: NodeID = NodeID::random();
 
