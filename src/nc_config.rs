@@ -13,6 +13,8 @@ pub struct NCConfiguration{
     pub heartbeat: u64,
     /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
     pub delay_request_data: u64,
+    /// Number of times a node should try to contact the server before givin up.
+    pub retry_counter: u8,
 }
 
 impl Default for NCConfiguration {
@@ -22,6 +24,7 @@ impl Default for NCConfiguration {
             port: 9000,
             heartbeat: 60,
             delay_request_data: 60,
+            retry_counter: 10,
         }
     }
 }
