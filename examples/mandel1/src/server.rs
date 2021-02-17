@@ -153,7 +153,7 @@ impl NCServer for MandelServer {
                     self.array2d_chunk.set_chunk(chunk_id, &source).map_err(|e| NCError::Array2D(e))
                 } else {
                     error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
-                    Err(NCError::NodeIDMismatch)
+                    Err(NCError::NodeIDMismatch(node_id, current_chunk.node_id))
                 }
             },
             Err(e) => {
@@ -197,7 +197,7 @@ pub fn run_server(options: Mandel1Opt) {
     for i in 0..array2d_chunk.num_of_chunks() {
         let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
         let chunk = Chunk {
-            x, y, width, height, node_id: NodeID::new(), status: ChunkStatus::Empty
+            x, y, width, height, node_id: NodeID::random(), status: ChunkStatus::Empty
         };
 
         all_chunks.push(chunk);
