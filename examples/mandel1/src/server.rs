@@ -1,5 +1,5 @@
 use log::{info, error, debug};
-use num::{complex::Complex64};
+use num::complex::Complex64;
 use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
@@ -150,10 +150,10 @@ impl NCServer for MandelServer {
 
                 if current_chunk.is_processing(node_id) {
                     current_chunk.set_finished();
-                    self.array2d_chunk.set_chunk(chunk_id, &source).map_err(|_| NCError::Custom(2))
+                    self.array2d_chunk.set_chunk(chunk_id, &source).map_err(|e| NCError::Array2D(e))
                 } else {
                     error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
-                    Err(NCError::Custom(1))
+                    Err(NCError::NodeIDMismatch)
                 }
             },
             Err(e) => {
