@@ -107,7 +107,8 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
     Ok(())
 }
 
-/// This function starts the heartbeat check thread in an endless loop.
+/// The heartbeat check thread is started here in an endless loop.
+/// It calls the function check_heartbeat() which checks the heartbeat time stamp for all nodes.
 /// If the job is done the loop will exit.
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64,
     node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>) {
@@ -131,8 +132,8 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
     });
 }
 
-/// This function checks all the registered nodes. If the heartbeat time stamp is too old (> 2 * hartbeat in NCConfiguration) then
-/// the server trait method heartbeat_timeout() is called where the node should be marked as offline.
+/// All the registered nodes are checked here. If the heartbeat time stamp is too old (> 2 * hartbeat in NCConfiguration) then
+/// the NCServer trait function heartbeat_timeout() is called where the node should be marked as offline.
 fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList,
     nc_server: &Arc<Mutex<T>>) -> Result<(), NCError> {
     debug!("Start check_heartbeat(), heartbeat_duration: {}", heartbeat_duration);
@@ -150,7 +151,8 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
     // Mutex node_list is unlocked here
 }
 
-/// This function starts the main loop and the tcp server.
+/// In here the main loop and the tcp server are started.
+/// For every node connection the function start_node_thread() is called, which handles the node request in a separate thread.
 /// If the job is done the loop will exit.
 fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList,
     nc_server: Arc<Mutex<T>>, config: NCConfiguration, job_done: Arc<AtomicBool>) {
@@ -175,15 +177,9 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
             break
         }
     }
-
-    // Clear node_list so that the heartbeat_thread can exit.
-    // Change this!
-    let mut node_list = node_list.lock().unwrap();
-    node_list.clear();
-    // Mutex node_list is unlocked here
 }
 
-/// This function starts a new thread for each node that sends a message to the server and calls the handle_node() function.
+/// This starts a new thread for each node that sends a message to the server and calls the handle_node() function in that thread.
 fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream,
     node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>) {
     debug!("Start start_node_thread()");
@@ -195,7 +191,7 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
     });
 }
 
-/// This function handles the message that was sent from a node. It can be on of these types:
+/// All the message that were sent from a node are handled here. It can be on of these types:
 /// - NCNodeMessage::Register: every new node has to register first, the server then assigns a new node id and sends some optional initial data back to the node with the
 ///   NCServerMessage::InitialData message. The server trait function initial_data() is called here.
 /// - NCNodeMessage::NeedsData: the node needs some data to process and depending on the job state the server answers this request with a NCServerMessage::JobStatus message.
@@ -286,6 +282,8 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
 }
 
 /// This function genreates a new and unique node id for a new node that has just registered with the server.
+/// It loops through the list of all nodes and checks wether the new id is already taken. If yes a new random id
+/// will be created and re-checked with the node list.
 fn get_new_node_id(all_nodes: &Vec<NCNodeInfo>) -> NodeID {
     let mut new_id: NodeID = NodeID::random();
 

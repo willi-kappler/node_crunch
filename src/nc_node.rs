@@ -57,9 +57,11 @@ pub trait NCNode {
     fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
 }
 
-/// This function is the main entry point for the code that runs on all nodes.
+/// The main entry point for the code that runs on all nodes.
 /// You give it your own user defined data structure that implements the NCNode trait and the configuration
 /// Everything else is done automatically for you.
+/// The NCNode trait function set_initial_data() is called here once in order to set the node id and some optional data that is
+/// the same for all nodes at the beginning.
 pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
     debug!("Start nc_start_node()");
 
@@ -79,7 +81,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
     Ok(())
 }
 
-/// This funcrion is called once at the beginning of nc_start_node().
+/// This is called once at the beginning of nc_start_node().
 /// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
 /// On succedd it returns the new assigned node id for this node and an optional initial data.
 /// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
@@ -100,7 +102,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
     }
 }
 
-/// This function starts the heartbeat thread that runs in the background and sends heartbeat messages to the server.
+/// The heartbeat thread that runs in the background and sends heartbeat messages to the server is started here.
 /// It does this every n seconds which can be configured in the NCConfiguration data structure.
 /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
 /// and gives another node the same data chunk to process.
@@ -134,10 +136,12 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
     });
 }
 
-/// This function starts the main loop for this node. It keeps requesting and processing data until the server
+/// Here is main loop for this node. It keeps requesting and processing data until the server
 /// sends a NCJobStatus::Finished message to this node.
 /// If there is an error this node will wait n seconds before it trys to reconnect to the server.
-/// The delay time can be configures in the NCConfiguration data structure.
+/// The delay time can be configured in the NCConfiguration data structure.
+/// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
+/// The counter can be configured in the NCConfiguration.
 fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID, job_done: Arc<AtomicBool>) {
     debug!("Start start_main_loop(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
