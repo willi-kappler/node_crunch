@@ -13,6 +13,7 @@ serde = { version = "1", features = ["derive"] }
 bincode = "1"
 rand = "0.7"
 crossbeam = "0.8"
+mio = {version = "0.7", features = ["os-poll", "net"]}
 
 [profile.release]
 lto = true

@@ -11,12 +11,14 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr};
 use std::time::{Instant, Duration};
 
 use log::{error, info, debug};
 use serde::{Serialize, Deserialize};
 use crossbeam::{self, thread::Scope};
+use mio::net::{TcpListener, TcpStream};
+use mio::{Events, Interest, Poll, Token};
 
 use crate::nc_error::NCError;
 use crate::nc_node::NCNodeMessage;
@@ -33,9 +35,6 @@ pub(crate) enum NCServerMessage {
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus),
-    /// This is the response message from the server when a node sends the heartbeat message NCNodeMessage::HeartBeat.
-    /// If quit == true this means that the job is done and the node heartbeat thread can exit.
-    HeartBeat(bool),
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
@@ -153,28 +152,54 @@ fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoL
 
 /// In here the main loop and the tcp server are started.
 /// For every node connection the function start_node_thread() is called, which handles the node request in a separate thread.
-/// If the job is done the loop will exit.
+/// A timeout is set for the server connection as specified in the configuration.
+/// If the job is done the finish countdown is decremented to give the nodes a chance to exit.
+/// At zero the loop will exit. The initial countdown value is specified in the configuration.
 fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NCNodeInfoList,
     nc_server: Arc<Mutex<T>>, config: NCConfiguration, job_done: Arc<AtomicBool>) {
     debug!("Start start_main_loop()");
 
+    let mut poll = Poll::new().unwrap();
+    let mut events = Events::with_capacity(1024);
+
     let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable
     let socket_addr = SocketAddr::new(ip_addr, config.port);
-    let listener = TcpListener::bind(socket_addr).unwrap();
+    let mut listener = TcpListener::bind(socket_addr).unwrap();
+
+    poll.registry().register(&mut listener, Token(0), Interest::READABLE).unwrap();
+
+    let server_socket_timeout = Duration::from_secs(config.server_socket_timeout as u64);
+    let mut finish_countdown = config.finish_countdown;
 
     loop {
-        match listener.accept() {
-            Ok((stream, addr)) => {
-                debug!("Got new connection from node: {}", addr);
-                start_node_thread(scope, stream, node_list.clone(), nc_server.clone(), job_done.clone());
-            }
-            Err(e) => {
-                error!("IO error while accepting node connections: {}", e);
+        poll.poll(&mut events, Some(server_socket_timeout)).unwrap();
+
+        for event in events.iter() {
+            match event.token() {
+                Token(0) => {
+                    match listener.accept() {
+                        Ok((stream, addr)) => {
+                            debug!("Got new connection from node: {}", addr);
+                            start_node_thread(scope, stream, node_list.clone(), nc_server.clone(), job_done.clone());
+                        }
+                        Err(e) => {
+                            error!("IO error while accepting node connections: {}", e);
+                        }
+                    }
+                }
+                Token(n) => {
+                    error!("Unexpected token: {}", n);
+                }
             }
         }
 
         if job_done.load(Ordering::Relaxed) {
-            break
+            if finish_countdown == 0 {
+                break
+            } else {
+                // Wait and give all other nodes a chance to exit.
+                finish_countdown -= 1
+            }
         }
     }
 }
@@ -197,11 +222,8 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
 /// - NCNodeMessage::NeedsData: the node needs some data to process and depending on the job state the server answers this request with a NCServerMessage::JobStatus message.
 ///   The server trait function prepare_data_for_node() is called here.
 /// - NCNodeMessage::HeartBeat: the node sends a heartbeat message and the server updates the internal node list with the corresponging current time stamp.
-///   The server answers with a NCServerMessage::HeartBeat message and sets quit == true if the job is done.
 /// - NCNodeMessage::HasData: the node has finished processing the data and has sent the result back to the server.
 ///   The server trait function process_data_from_node() is called here.
-/// - NCNodeMessage::NodeQuit: the node has received the server message NCJobStatus::Finished and confirms that the job is done. This is needed so that the server has a chance to
-///   wait for all the threads to finish.
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
     nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>) -> Result<(), NCError> {
     debug!("Start handle_node()");
@@ -253,18 +275,14 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
         NCNodeMessage::HeartBeat(node_id) => {
             debug!("Got heartbeat from node: {}", node_id);
 
-            {
-                let mut node_list = node_list.lock()?;
+            let mut node_list = node_list.lock()?;
 
-                for node in node_list.iter_mut() {
-                    if node.node_id == node_id {
-                        node.update_heartbeat();
-                    }
+            for node in node_list.iter_mut() {
+                if node.node_id == node_id {
+                    node.update_heartbeat();
                 }
-                // Mutex node_list is unlocked here
             }
-
-            nc_send_data2(&NCServerMessage::HeartBeat(job_done.load(Ordering::Relaxed)), &mut stream)?;
+            // Mutex node_list is unlocked here
         }
         NCNodeMessage::HasData(node_id, data) => {
             debug!("Node {} has processed some data and we received the results", node_id);
@@ -272,9 +290,6 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
             let mut nc_server = nc_server.lock()?;
             nc_server.process_data_from_node(node_id, &data)?;
             // Mutex nc_server is unlocked here
-        }
-        NCNodeMessage::NodeQuit(node_id) => {
-            info!("Node {} will quit", node_id);
         }
     }
 
