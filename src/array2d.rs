@@ -150,7 +150,7 @@ impl<T: Clone + Copy> Array2DChunk<T> {
         self.array2d.get(x, y)
     }
 
-    /// Returns the dimension for the whole Array2D data
+    /// Returns the dimension (width, height) for the whole Array2D data
     pub fn dimensions(&self) -> (u64, u64) {
         (self.array2d.width, self.array2d.height)
     }

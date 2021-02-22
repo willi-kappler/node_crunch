@@ -9,6 +9,7 @@
 // - Add authentication ?
 // - Add error_counter, if too high exit both node and server
 // - Speed up serde: https://github.com/serde-rs/bytes
+// - Maybe use TcpListener with a timeout ?
 
 mod nc_server;
 mod nc_node;
