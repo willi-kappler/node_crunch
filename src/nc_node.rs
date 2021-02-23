@@ -30,8 +30,8 @@ pub(crate) enum NCNodeMessage {
     HasData(NodeID, Vec<u8>),
     /// This node sends a hearbeat message every n seconds. The time span between two heartbeats is set in the configuration NCConfiguration.
     HeartBeat(NodeID),
-    /// If the server sends a NCJobStatus::Finished message, this node responds with a NodeQuit message. This gives the server a chance to wait for all threads to finish.
-    NodeQuit(NodeID),
+    /// This is a message that the server sends to itself to break out from blocking on node connection via accept()
+    WakeUpServer,
 }
 
 // TODO: Generic trait, U for data in, V for data out
@@ -106,10 +106,6 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 /// It does this every n seconds which can be configured in the NCConfiguration data structure.
 /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
 /// and gives another node the same data chunk to process.
-/// If the server sends a heartbeat response with quit == true that means that the job is done and the heartbeat thread can exit.
-/// Otherwise the thread continues to send heartbeats every n seconds.
-/// If the server respondes with a different message an error is logged. The error is also logged in case of an IO error.
-/// The heartbeat thread still tries to contact the server after a sleep duration of n seconds.
 fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration, job_done: Arc<AtomicBool>) {
     debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 
@@ -117,16 +113,8 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
         loop {
             thread::sleep(heartbeat_duration);
 
-            match nc_send_receive_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
-                Ok(NCServerMessage::HeartBeat(quit)) => {
-                    if quit { break }
-                }
-                Ok(msg) => {
-                    error!("Error in start_heartbeat_thread(), unexpected server message: {:?}", msg);
-                }
-                Err(e) => {
-                    error!("Error in nc_send_receive_data(): {}", e);
-                }
+            if let Err(e) = nc_send_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
+                error!("Error in nc_send_receive_data(): {}", e);
             }
 
             if job_done.load(Ordering::Relaxed) {
@@ -160,11 +148,11 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
             Err(e) => {
                 error!("Error in get_and_process_data(): {}, retry counter: {}", e, retry_counter);
 
-                retry_counter -= 1;
-
                 if retry_counter == 0 {
                     debug!("Retry counter is zero, will exit now");
                     job_done.store(true, Ordering::Relaxed);
+                } else {
+                    retry_counter -= 1;
                 }
 
                 debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
@@ -214,8 +202,6 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
             }
             NCJobStatus::Finished => {
                 debug!("Job is done, node will quit.");
-                // This gives the server a chance to exit the main loop
-                nc_send_data(&NCNodeMessage::NodeQuit(node_id), &socket_addr).map(|_| false)?;
                 Ok(true)
             }
         }
