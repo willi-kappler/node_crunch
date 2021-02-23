@@ -28,7 +28,7 @@ pub(crate) enum NCNodeMessage {
     NeedsData(NodeID),
     /// This node has finished processing the data and sends it to the server. No answer from the server.
     HasData(NodeID, Vec<u8>),
-    /// This node sends a hearbeat message every n seconds. The time span between two heartbeats is set in the configuration NCConfiguration.
+    /// This node sends a heartbeat message every n seconds. The time span between two heartbeats is set in the configuration NCConfiguration.
     HeartBeat(NodeID),
     /// This is a message that the server sends to itself to break out from blocking on node connection via accept()
     WakeUpServer,
@@ -83,7 +83,7 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
 /// This is called once at the beginning of nc_start_node().
 /// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
-/// On succedd it returns the new assigned node id for this node and an optional initial data.
+/// On succeeded it returns the new assigned node id for this node and an optional initial data.
 /// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
 fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>), NCError> {
     debug!("Start get_initial_data(), socket_addr: {}", socket_addr);
@@ -126,7 +126,7 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
 
 /// Here is main loop for this node. It keeps requesting and processing data until the server
 /// sends a NCJobStatus::Finished message to this node.
-/// If there is an error this node will wait n seconds before it trys to reconnect to the server.
+/// If there is an error this node will wait n seconds before it tries to reconnect to the server.
 /// The delay time can be configured in the NCConfiguration data structure.
 /// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
 /// The counter can be configured in the NCConfiguration.

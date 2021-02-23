@@ -27,12 +27,13 @@ use crate::nc_util::{nc_receive_data, nc_send_data2, nc_send_receive_data};
 ///! This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage {
-    /// When the node registeres for the first time with the NCNodeMessage::Register message the server assigns a new node id
+    /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
     /// and sends some optional initial data to the node.
     InitialData(NodeID, Option<Vec<u8>>),
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus),
+    // TODO: Add new message for answering WakeUpServer
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
@@ -67,7 +68,7 @@ pub trait NCServer {
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
     /// When one node is done processing the data from the server it will send the result back to the server and then this function is called.
     fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
-    /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heatbeat value in the NCConfiguration)
+    /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heartbeat value in the NCConfiguration)
     /// then this function is called with the corresponding node id and the node should marked as offline in this function.
     fn heartbeat_timeout(&mut self, node_id: NodeID);
     /// When all the nodes are done with processing and all internal threads are also finished then this function is called.
@@ -118,21 +119,23 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
 
     scope.spawn(move |_| {
         let duration = Duration::from_secs(heartbeat_duration);
+
         loop {
             thread::sleep(duration);
-
-            if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
-                error!("Error in check_heartbeat(): {}", e);
-            }
 
             // Send WakeUpServer message to server so that it can check whether to exit the main loop or not
             // TODO: receive job status message in order to exit loop
             match nc_send_receive_data(&NCNodeMessage::WakeUpServer, &socket_addr) {
-                Ok(NCServerMessage::JobStatus(NCJobStatus::Finished)) => {
-                    break
+                Ok(NCServerMessage::JobStatus(NCJobStatus::Unfinished(_))) => {
+                    if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
+                        error!("Error in check_heartbeat(): {}", e);
+                    }    
                 }
                 Ok(NCServerMessage::JobStatus(NCJobStatus::Waiting)) => {
                     debug!("Waiting for countdown to finish");
+                }
+                Ok(NCServerMessage::JobStatus(NCJobStatus::Finished)) => {
+                    break
                 }
                 Ok(msg) => {
                     error!("Unexpected message from server: {:?}", msg);
@@ -146,7 +149,7 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
     });
 }
 
-/// All the registered nodes are checked here. If the heartbeat time stamp is too old (> 2 * hartbeat in NCConfiguration) then
+/// All the registered nodes are checked here. If the heartbeat time stamp is too old (> 2 * heartbeat in NCConfiguration) then
 /// the NCServer trait function heartbeat_timeout() is called where the node should be marked as offline.
 fn check_heartbeat<T: NCServer>(heartbeat_duration: u64, node_list: &NCNodeInfoList,
     nc_server: &Arc<Mutex<T>>) -> Result<(), NCError> {
@@ -292,7 +295,11 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
             if finish_countdown == 0 {
                 nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
             } else {
-                nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)?;
+                if job_done.load(Ordering::Relaxed) {
+                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)?;
+                } else {
+                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Unfinished(Vec::new())), &mut stream)?;
+                }
             }
         }
     }

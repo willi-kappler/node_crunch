@@ -12,7 +12,7 @@ pub struct NCConfiguration{
     /// Default is 5 times.
     pub finish_countdown: u8,
     /// Nodes have to send a heartbeat every n seconds or they will be marked as offline.
-    /// The function heartbeat_timeout(node_id) with the coresponding node ID is called.
+    /// The function heartbeat_timeout(node_id) with the corresponding node ID is called.
     pub heartbeat: u64,
     /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
     pub delay_request_data: u64,
