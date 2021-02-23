@@ -33,7 +33,9 @@ pub(crate) enum NCServerMessage {
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus),
-    // TODO: Add new message for answering WakeUpServer
+    /// This is the response for WakeUpServer in the heartbeat thread. The first value indicates if the job is done,
+    /// the second value is the current finish_countdown value.
+    WakeUpResponse(bool, u8),
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
@@ -126,16 +128,18 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
             // Send WakeUpServer message to server so that it can check whether to exit the main loop or not
             // TODO: receive job status message in order to exit loop
             match nc_send_receive_data(&NCNodeMessage::WakeUpServer, &socket_addr) {
-                Ok(NCServerMessage::JobStatus(NCJobStatus::Unfinished(_))) => {
-                    if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
-                        error!("Error in check_heartbeat(): {}", e);
-                    }    
-                }
-                Ok(NCServerMessage::JobStatus(NCJobStatus::Waiting)) => {
-                    debug!("Waiting for countdown to finish");
-                }
-                Ok(NCServerMessage::JobStatus(NCJobStatus::Finished)) => {
-                    break
+                Ok(NCServerMessage::WakeUpResponse(finished, countdown)) => {
+                    if finished {
+                        if countdown == 0 {
+                            break
+                        } else {
+                            debug!("Waiting for countdown to finish: {}", countdown);
+                        }
+                    } else {
+                        if let Err(e) = check_heartbeat(heartbeat_duration, &node_list, &nc_server) {
+                            error!("Error in check_heartbeat(): {}", e);
+                        }
+                    }
                 }
                 Ok(msg) => {
                     error!("Unexpected message from server: {:?}", msg);
@@ -223,6 +227,7 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
 /// - NCNodeMessage::HasData: the node has finished processing the data and has sent the result back to the server.
 ///   The server trait function process_data_from_node() is called here.
 /// - NCNodeMessage::WakeUpServer: This gives the server a chance to break out from the blocking accept() function.
+///   The server answers with a NCServerMessage::WakeUpResponse message.
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
     nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>, finish_countdown: u8) -> Result<(), NCError> {
     debug!("Start handle_node()");
@@ -292,15 +297,8 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
         }
         NCNodeMessage::WakeUpServer => {
             debug!("Message WakeUpServer received!");
-            if finish_countdown == 0 {
-                nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
-            } else {
-                if job_done.load(Ordering::Relaxed) {
-                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)?;
-                } else {
-                    nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Unfinished(Vec::new())), &mut stream)?;
-                }
-            }
+            nc_send_data2(&NCServerMessage::WakeUpResponse(job_done.load(Ordering::Relaxed),
+                finish_countdown), &mut stream)?;
         }
     }
 

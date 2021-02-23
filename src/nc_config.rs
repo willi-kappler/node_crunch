@@ -25,7 +25,7 @@ impl Default for NCConfiguration {
         NCConfiguration {
             address: "127.0.0.1".to_string(),
             port: 9000,
-            finish_countdown: 5,
+            finish_countdown: 3,
             heartbeat: 60,
             delay_request_data: 60,
             retry_counter: 10,
