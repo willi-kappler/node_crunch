@@ -22,7 +22,7 @@ use crate::nc_error::NCError;
 use crate::nc_node::NCNodeMessage;
 use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::{NCNodeInfo, NodeID};
-use crate::nc_util::{nc_receive_data, nc_send_data2, nc_send_data};
+use crate::nc_util::{nc_receive_data, nc_send_data2, nc_send_receive_data};
 
 ///! This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 
     crossbeam::scope(|scope|{
         start_heartbeat_thread(scope, 2 * config.heartbeat, node_list.clone(),
-            nc_server.clone(), job_done.clone(), config.port);
+            nc_server.clone(), config.port);
         start_main_loop(scope, node_list.clone(), nc_server.clone(), config, job_done.clone());
     }).unwrap();
 
@@ -110,7 +110,7 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 /// Also sends the message WakeUpServer to the server itself, in order to exit from the blocking accept() call.
 /// If the job is done the loop will exit.
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64,
-    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>, port: u16) {
+    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, port: u16) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);
 
     let ip_addr: IpAddr = "127.0.0.1".parse().unwrap();
@@ -126,14 +126,21 @@ fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartb
             }
 
             // Send WakeUpServer message to server so that it can check whether to exit the main loop or not
-            if let Err(e) = nc_send_data(&NCNodeMessage::WakeUpServer, &socket_addr) {
-                error!("Error in start_heartbeat_thread(), couldn't send WakeUpServer message: {}", e);
+            // TODO: receive job status message in order to exit loop
+            match nc_send_receive_data(&NCNodeMessage::WakeUpServer, &socket_addr) {
+                Ok(NCServerMessage::JobStatus(NCJobStatus::Finished)) => {
+                    break
+                }
+                Ok(NCServerMessage::JobStatus(NCJobStatus::Waiting)) => {
+                    debug!("Waiting for countdown to finish");
+                }
+                Ok(msg) => {
+                    error!("Unexpected message from server: {:?}", msg);
+                }
+                Err(e) => {
+                    error!("Error in start_heartbeat_thread(), couldn't send WakeUpServer message: {}", e);
+                }
             }
-
-            if job_done.load(Ordering::Relaxed) {
-                break
-            }
-
         }
         debug!("Exit start_heartbeat_thread() main loop");
     });
@@ -168,12 +175,13 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
     let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable
     let socket_addr = SocketAddr::new(ip_addr, config.port);
     let listener = TcpListener::bind(socket_addr).unwrap();
+    let mut finish_countdown = config.finish_countdown;
 
     loop {
         match listener.accept() {
             Ok((stream, addr)) => {
                 debug!("Got new connection from node: {}", addr);
-                start_node_thread(scope, stream, node_list.clone(), nc_server.clone(), job_done.clone());
+                start_node_thread(scope, stream, node_list.clone(), nc_server.clone(), job_done.clone(), finish_countdown);
             }
             Err(e) => {
                 error!("IO error while accepting node connections: {}", e);
@@ -181,19 +189,23 @@ fn start_main_loop<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, node_list: NC
         }
 
         if job_done.load(Ordering::Relaxed) {
-            // TODO: Add countdown
-            break
+            if finish_countdown == 0 {
+                break
+            } else {
+                // Wait and give all other nodes a chance to exit.
+                finish_countdown -= 1
+            }
         }
     }
 }
 
 /// This starts a new thread for each node that sends a message to the server and calls the handle_node() function in that thread.
 fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: TcpStream,
-    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>) {
+    node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>, finish_countdown: u8) {
     debug!("Start start_node_thread()");
 
-    scope.spawn(|_| {
-        if let Err(e) = handle_node(stream, node_list, nc_server, job_done) {
+    scope.spawn(move |_| {
+        if let Err(e) = handle_node(stream, node_list, nc_server, job_done, finish_countdown) {
             error!("Error in handle_node(): {}", e);
         }
     });
@@ -209,7 +221,7 @@ fn start_node_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, stream: Tcp
 ///   The server trait function process_data_from_node() is called here.
 /// - NCNodeMessage::WakeUpServer: This gives the server a chance to break out from the blocking accept() function.
 fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
-    nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>) -> Result<(), NCError> {
+    nc_server: Arc<Mutex<T>>, job_done: Arc<AtomicBool>, finish_countdown: u8) -> Result<(), NCError> {
     debug!("Start handle_node()");
 
     let request: NCNodeMessage = nc_receive_data(&mut stream)?;
@@ -277,6 +289,11 @@ fn handle_node<T: NCServer>(mut stream: TcpStream, node_list: NCNodeInfoList,
         }
         NCNodeMessage::WakeUpServer => {
             debug!("Message WakeUpServer received!");
+            if finish_countdown == 0 {
+                nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Finished), &mut stream)?;
+            } else {
+                nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)?;
+            }
         }
     }
 
