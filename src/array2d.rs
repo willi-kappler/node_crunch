@@ -158,54 +158,74 @@ impl<T: Clone + Copy> Array2DChunk<T> {
     }
 }
 
+/// A Chunk of data can have three states.
 #[derive(Debug, Clone, PartialEq)]
 enum ChunkStatus {
+    /// 1. empty: no node has been assigned to this data.
     Empty,
+    /// 2. processing: at least one node is processing the data.
     Processing,
+    /// 3. finished: this piece of data has been processed sucessfully.
     Finished,
 }
 
+/// The actual data and some book keeping information.
 #[derive(Debug, Clone)]
 pub struct Chunk<T> {
+    /// The data itself.
     pub data: T,
+    /// ID of the node that is currently processing the data.
     pub node_id: NodeID,
+    /// Has the data already been processed ? Is is not assigned yet ?
     status: ChunkStatus,
 }
 
 impl<T> Chunk<T> {
+    /// Sets the chunk status to empty.
     pub fn set_empty(&mut self) {
         self.status = ChunkStatus::Empty
     }
 
+    /// Checks if the chunk has been assigned yet or not.
     pub fn is_empty(&self) -> bool {
         self.status == ChunkStatus::Empty
     }
 
+    /// Sets the chunk status to processing with the corresponding node id.
     pub fn set_processing(&mut self, node_id: NodeID) {
         self.status = ChunkStatus::Processing;
         self.node_id = node_id;
     }
 
+    /// Checks if the chunk is currently beeing processed.
     pub fn is_processing(&self, node_id: NodeID) -> bool {
         self.status == ChunkStatus::Processing &&
         self.node_id == node_id
     }
 
+    /// Checks if the chunk is finished.
     pub fn set_finished(&mut self) {
         self.status = ChunkStatus::Finished;
     }
 }
 
+/// A list of chunks and some helper functions.
 #[derive(Debug, Clone)]
 pub struct ChunkList<T> {
     chunks: Vec<Chunk<T>>
 }
 
 impl<T> ChunkList<T> {
+    /// Creates a new and empty chunk list.
     pub fn new() -> Self {
         ChunkList{ chunks: Vec::new() }
     }
 
+    /// Returns some statistics about the chunks in the list as a three tuple:
+    /// 1. empty: how many chunks have not been assigned yet
+    /// 2. processing: how many chunks are assigned to nodes.
+    /// 3. finished: how many chunks are done with processing.
+    /// (empty, processing, finished)
     pub fn stats(&self) -> (u64, u64, u64) {
         let mut empty: u64 = 0;
         let mut processing: u64 = 0;
@@ -222,14 +242,19 @@ impl<T> ChunkList<T> {
         (empty, processing, finished)
     }
 
+    /// If there is a free chunk in the list return the index and a mutable reference to it.
+    /// Else return None if all chunks are in processing or finished state.
     pub fn get_next_free_chunk(&mut self) -> Option<(usize, &mut Chunk<T>)> {
         self.chunks.iter().position(|chunk| chunk.is_empty()).map(move |index| (index, &mut self.chunks[index]))
     }
 
+    /// Returns a mutable reference to the chunk at the given index.
     pub fn get(&mut self, index: usize) -> &mut Chunk<T> {
         &mut self.chunks[index]
     }
 
+    /// Some nodes may have crashed or lost the network connection.
+    /// Sets all the chunks that these nodes have been processing to the empty state ChunkStatus::Empty.
     pub fn heartbeat_timeout(&mut self, nodes: &[NodeID]) {
         for chunk in self.chunks.iter_mut() {
             for node_id in nodes.iter() {
@@ -240,6 +265,7 @@ impl<T> ChunkList<T> {
         }
     }
 
+    /// Adds a new chunk with the given data to the list of chunks.
     pub fn push(&mut self, data: T) {
         self.chunks.push(Chunk{ data, node_id: NodeID::random(), status: ChunkStatus::Empty});
     }
