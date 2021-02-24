@@ -7,9 +7,8 @@
 // TODO:
 // - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
 // - Add authentication ?
-// - Add error_counter, if too high exit both node and server
 // - Speed up serde: https://github.com/serde-rs/bytes
-// - Maybe use TcpListener with a timeout ?
+// - Move node_list, nc_server, job_done and config into a separate struct and use a mutex for the new struct.
 
 mod nc_server;
 mod nc_node;
@@ -25,4 +24,4 @@ pub use nc_node_info::NodeID;
 pub use nc_error::NCError;
 pub use nc_config::NCConfiguration;
 pub use nc_util::{nc_decode_data, nc_decode_data2, nc_encode_data};
-pub use array2d::{Array2D, Array2DChunk};
+pub use array2d::{Array2D, Array2DChunk, ChunkList, Chunk};

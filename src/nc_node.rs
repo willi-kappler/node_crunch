@@ -52,7 +52,7 @@ pub trait NCNode {
     /// Here you put your code that does the main number crunching on every node.
     /// Note that you have to use the nc_decode_data() or nc_decode_data2() helper functions from the nc_utils module in order to
     /// deserialize the data.
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError>;
+    fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError>;
 }
 
 /// The main entry point for the code that runs on all nodes.
@@ -176,7 +176,7 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
         match job_status {
             NCJobStatus::Unfinished(data) => {
                 debug!("New data received from server");
-                let result = nc_node.process_data_from_server(data)?;
+                let result = nc_node.process_data_from_server(&data)?;
                 debug!("Send processed data to server");
                 nc_send_data(&NCNodeMessage::HasData(node_id, result), &socket_addr)
             }

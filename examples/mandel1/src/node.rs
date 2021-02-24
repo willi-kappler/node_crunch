@@ -10,7 +10,7 @@ struct MandelNode {
 }
 
 impl NCNode for MandelNode {
-    fn process_data_from_server(&mut self, data: Vec<u8>) -> Result<Vec<u8>, NCError> {
+    fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError> {
         let input: ServerData = nc_decode_data(&data)?;
         let mut array2d = Array2D::<u32>::new(input.width, input.height, 0);
         let mut c: Complex64;

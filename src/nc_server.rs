@@ -24,7 +24,7 @@ use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::{NodeID, NCNodeList};
 use crate::nc_util::{nc_receive_data, nc_send_data, nc_send_data2};
 
-///! This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
+/// This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
@@ -66,7 +66,7 @@ pub trait NCServer {
     /// Unfinished, Waiting or Finished.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
     /// When one node is done processing the data from the server it will send the result back to the server and then this function is called.
-    fn process_data_from_node(&mut self, node_id: NodeID, data: &Vec<u8>) -> Result<(), NCError>;
+    fn process_data_from_node(&mut self, node_id: NodeID, data: &[u8]) -> Result<(), NCError>;
     /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heartbeat value in the NCConfiguration)
     /// then this function is called with the corresponding node id and the node should marked as offline in this function.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>);
@@ -78,7 +78,7 @@ pub trait NCServer {
 
 /// This is the main function that you call when you start the server. It expects your custom data structure that implements the NCServer trait
 /// and a configuration.
-/// Once the job is done the server trait method finish_job() is called here.
+/// Once the job is done the server trait function finish_job() is called here.
 pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration) -> Result<(), NCError> {
     debug!("Start nc_start_server()");
 

@@ -6,6 +6,8 @@ use std::{error, fmt};
 
 use serde::{Serialize, Deserialize};
 
+use crate::nc_node_info::NodeID;
+
 /// Currently only one error when the dimension do not match.
 #[derive(Debug)]
 pub enum Array2DError {
@@ -153,5 +155,92 @@ impl<T: Clone + Copy> Array2DChunk<T> {
     /// Returns the dimension (width, height) for the whole Array2D data
     pub fn dimensions(&self) -> (u64, u64) {
         (self.array2d.width, self.array2d.height)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ChunkStatus {
+    Empty,
+    Processing,
+    Finished,
+}
+
+#[derive(Debug, Clone)]
+pub struct Chunk<T> {
+    pub data: T,
+    pub node_id: NodeID,
+    status: ChunkStatus,
+}
+
+impl<T> Chunk<T> {
+    pub fn set_empty(&mut self) {
+        self.status = ChunkStatus::Empty
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.status == ChunkStatus::Empty
+    }
+
+    pub fn set_processing(&mut self, node_id: NodeID) {
+        self.status = ChunkStatus::Processing;
+        self.node_id = node_id;
+    }
+
+    pub fn is_processing(&self, node_id: NodeID) -> bool {
+        self.status == ChunkStatus::Processing &&
+        self.node_id == node_id
+    }
+
+    pub fn set_finished(&mut self) {
+        self.status = ChunkStatus::Finished;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChunkList<T> {
+    chunks: Vec<Chunk<T>>
+}
+
+impl<T> ChunkList<T> {
+    pub fn new() -> Self {
+        ChunkList{ chunks: Vec::new() }
+    }
+
+    pub fn stats(&self) -> (u64, u64, u64) {
+        let mut empty: u64 = 0;
+        let mut processing: u64 = 0;
+        let mut finished: u64 = 0;
+
+        for chunk in self.chunks.iter() {
+            match chunk.status {
+                ChunkStatus::Empty => empty += 1,
+                ChunkStatus::Processing => processing += 1,
+                ChunkStatus::Finished => finished += 1,
+            }
+        }
+
+        (empty, processing, finished)
+    }
+
+    pub fn get_next_free_chunk(&mut self) -> Option<(usize, &mut Chunk<T>)> {
+        self.chunks.iter().position(|chunk| chunk.is_empty()).map(move |index| (index, &mut self.chunks[index]))
+    }
+
+    pub fn get(&mut self, index: usize) -> &mut Chunk<T> {
+        &mut self.chunks[index]
+    }
+
+    pub fn heartbeat_timeout(&mut self, nodes: &[NodeID]) {
+        for chunk in self.chunks.iter_mut() {
+            for node_id in nodes.iter() {
+                if chunk.is_processing(*node_id) {
+                    chunk.set_empty()
+                }
+            }
+        }
+    }
+
+    pub fn push(&mut self, data: T) {
+        self.chunks.push(Chunk{ data, node_id: NodeID::random(), status: ChunkStatus::Empty});
     }
 }
