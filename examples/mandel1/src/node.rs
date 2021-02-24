@@ -1,5 +1,5 @@
 use log::{info, error};
-use num::{complex::Complex64};
+use num::complex::Complex64;
 
 use node_crunch::{NCNode, NCError, NCConfiguration, Array2D,
     nc_start_node, nc_decode_data, nc_encode_data};

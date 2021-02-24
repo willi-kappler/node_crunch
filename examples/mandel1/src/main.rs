@@ -5,7 +5,7 @@ use structopt::StructOpt;
 use log4rs;
 use serde::{Serialize, Deserialize};
 
-use node_crunch::{Array2D};
+use node_crunch::Array2D;
 
 mod server;
 mod node;
