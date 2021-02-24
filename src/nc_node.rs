@@ -4,8 +4,6 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::{thread, time::Duration};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{error, info, debug};
 
@@ -16,7 +14,7 @@ use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::NodeID;
-use crate::nc_util::{nc_send_receive_data, nc_send_data};
+use crate::nc_util::{nc_send_receive_data, nc_send_data, RetryCounter};
 
 /// This message is sent from the node to the server in order to register, receive new data and send processed data.
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,14 +65,15 @@ pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Resu
 
     let ip_addr: IpAddr = config.address.parse()?;
     let socket_addr = SocketAddr::new(ip_addr, config.port);
-    let job_done = Arc::new(AtomicBool::new(false));
     let (node_id, initial_data) = get_initial_data(&socket_addr)?;
 
     nc_node.set_initial_data(node_id, initial_data)?;
 
+    let retry_counter = RetryCounter::new(config.retry_counter);
+
     crossbeam::scope(|scope|{
-        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat), job_done.clone());
-        start_main_loop(nc_node, socket_addr, config, node_id, job_done.clone());
+        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat), retry_counter.clone());
+        start_main_loop(nc_node, socket_addr, config, node_id, retry_counter);
     }).unwrap();
 
     info!("Job done, exit now");
@@ -106,7 +105,7 @@ fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>
 /// It does this every n seconds which can be configured in the NCConfiguration data structure.
 /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
 /// and gives another node the same data chunk to process.
-fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration, job_done: Arc<AtomicBool>) {
+fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration, mut retry_counter: RetryCounter) {
     debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
 
     scope.spawn(move |_| {
@@ -114,11 +113,15 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
             thread::sleep(heartbeat_duration);
 
             if let Err(e) = nc_send_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
-                error!("Error in nc_send_receive_data(): {}", e);
-            }
+                error!("Error in nc_send_data(): {}, retry_counter: {:?}", e, retry_counter);
 
-            if job_done.load(Ordering::Relaxed) {
-                break
+                if retry_counter.dec_and_check() {
+                    debug!("Retry counter is zero, will exit now");
+                    break
+                }
+            } else {
+                // Reset the counter if message was sent sucessfully
+                retry_counter.reset()
             }
         }
     });
@@ -130,38 +133,27 @@ fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAdd
 /// The delay time can be configured in the NCConfiguration data structure.
 /// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
 /// The counter can be configured in the NCConfiguration.
-fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID, job_done: Arc<AtomicBool>) {
+fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID, mut retry_counter: RetryCounter) {
     debug!("Start start_main_loop(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
-    let mut retry_counter = config.retry_counter;
     let duration = Duration::from_secs(config.delay_request_data);
 
     loop {
         debug!("Ask server for new data");
 
-        match get_and_process_data(&mut nc_node, socket_addr, node_id, duration) {
-            Ok(quit) => {
-                if quit {
-                    job_done.store(true, Ordering::Relaxed);
-                }
+        if let Err(e) = get_and_process_data(&mut nc_node, socket_addr, node_id, duration) {
+            error!("Error in get_and_process_data(): {}, retry counter: {:?}", e, retry_counter);
+
+            if retry_counter.dec_and_check() {
+                debug!("Retry counter is zero, will exit now");
+                break
             }
-            Err(e) => {
-                error!("Error in get_and_process_data(): {}, retry counter: {}", e, retry_counter);
 
-                if retry_counter == 0 {
-                    debug!("Retry counter is zero, will exit now");
-                    job_done.store(true, Ordering::Relaxed);
-                } else {
-                    retry_counter -= 1;
-                }
-
-                debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
-                thread::sleep(duration);
-            }
-        }
-
-        if job_done.load(Ordering::Relaxed) {
-            break
+            debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
+            thread::sleep(duration);
+        } else {
+            // Reset the counter if message was sent sucessfully
+            retry_counter.reset()
         }
     }
 
@@ -169,14 +161,13 @@ fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: N
 }
 
 /// This function sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
-/// Only one message is expected as a response from the server: NCServerMessage::JobStatus. This status can have three values
+/// Only one message is expected as a response from the server: NCServerMessage::JobStatus. This status can have two values
 /// 1. NCJobStatus::Unfinished: This means that the job is note done and there is still some more data to be processed.
 ///      This node will then process the data calling the process_data_from_server() function and sends the data back to the
 ///      server using the NCNodeMessage::HasData message.
 /// 2. NCJobStatus::Waiting: This means that not all nodes are done and the server is still waiting for all nodes to finish.
-/// 3. NCJobStatus::Finished: The job is finally done and all the nodes can exit.
 /// If the server sends a different message this function will return a NCError::ServerMsgMismatch error.
-fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID, duration: Duration) -> Result<bool, NCError> {
+fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID, duration: Duration) -> Result<(), NCError> {
     debug!("Start get_and_process_data(), socket_addr: {}, node_id: {}", socket_addr, node_id);
 
     let result = nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr)?;
@@ -187,7 +178,7 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
                 debug!("New data received from server");
                 let result = nc_node.process_data_from_server(data)?;
                 debug!("Send processed data to server");
-                nc_send_data(&NCNodeMessage::HasData(node_id, result), &socket_addr).map(|_| false)
+                nc_send_data(&NCNodeMessage::HasData(node_id, result), &socket_addr)
             }
             NCJobStatus::Waiting => {
                 // The node will not exit here since the job is not 100% done.
@@ -198,11 +189,12 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
 
                 debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", duration.as_secs());
                 thread::sleep(duration);
-                Ok(false)
+                Ok(())
             }
-            NCJobStatus::Finished => {
-                debug!("Job is done, node will quit.");
-                Ok(true)
+            msg => {
+                // The server does not bother sending the node a NCJobStatus::Finished message.
+                error!("Error: unexpected message from server: {:?}", msg);
+                Err(NCError::ServerMsgMismatch)
             }
         }
     } else {

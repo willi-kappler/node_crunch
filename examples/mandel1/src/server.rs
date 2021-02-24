@@ -163,12 +163,12 @@ impl NCServer for MandelServer {
         }
     }
 
-    fn heartbeat_timeout(&mut self, node_id: NodeID) {
-        info!("Heartbeat timeout, node_id: {}", node_id);
-
+    fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>) {
         for chunk in self.all_chunks.iter_mut() {
-            if chunk.is_processing(node_id) {
-                chunk.set_empty()
+            for node_id in nodes.iter() {
+                if chunk.is_processing(*node_id) {
+                    chunk.set_empty()
+                }
             }
         }
     }

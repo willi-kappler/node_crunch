@@ -8,16 +8,13 @@ pub struct NCConfiguration{
     pub address: String,
     /// Port used by the server
     pub port: u16,
-    /// When the job is done, how often should the server check for node connections before exiting.
-    /// Default is 5 times.
-    pub finish_countdown: u8,
     /// Nodes have to send a heartbeat every n seconds or they will be marked as offline.
     /// The function heartbeat_timeout(node_id) with the corresponding node ID is called.
     pub heartbeat: u64,
     /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
     pub delay_request_data: u64,
     /// Number of times a node should try to contact the server before givin up.
-    pub retry_counter: u8,
+    pub retry_counter: u64,
 }
 
 impl Default for NCConfiguration {
@@ -25,10 +22,9 @@ impl Default for NCConfiguration {
         NCConfiguration {
             address: "127.0.0.1".to_string(),
             port: 9000,
-            finish_countdown: 3,
             heartbeat: 60,
             delay_request_data: 60,
-            retry_counter: 10,
+            retry_counter: 5,
         }
     }
 }
