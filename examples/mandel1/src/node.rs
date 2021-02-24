@@ -6,10 +6,15 @@ use node_crunch::{NCNode, NCError, NCConfiguration, Array2D,
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
+/// In this example the NCNode data struct has no useful data, just code.
 struct MandelNode {
 }
 
 impl NCNode for MandelNode {
+    /// This processes the data that has been send from the server to this node.
+    /// In here the whole number crunshing is happending in this example the mandelbrot set.
+    /// The result is returned in a Ok(Vec<u8>).
+    /// Return an error otherwise.
     fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError> {
         let input: ServerData = nc_decode_data(&data)?;
         let mut array2d = Array2D::<u32>::new(input.width, input.height, 0);
@@ -37,6 +42,7 @@ impl NCNode for MandelNode {
     }
 }
 
+/// Starts the node with the given configuration.
 pub fn run_node(options: Mandel1Opt) {
     let configuration = NCConfiguration {
         port: options.port,

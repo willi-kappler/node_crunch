@@ -8,26 +8,40 @@ use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
+/// This is the data that is stores in the chunks list.
 #[derive(Debug, Clone)]
 struct ChunkData {
+    /// X position of the chunk inside the Array2D = x position in the final image.
     x: u64,
+    /// A position of the chunk inside the Array2D = y position in the final image.
     y: u64,
+    /// width of the chunk inside the Array2D.
     width: u64,
+    /// height of the chunk inside the Array2D.
     height: u64,
 }
 
+/// This has the image data, mandelbrot set configuration and the chunks list.
 #[derive(Debug, Clone)]
 struct MandelServer {
+    /// Start (upper left) of mandelbrot set in the complex plane.
     start: Complex64,
+    /// Start (lower right) of mandelbrot set in the complex plane.
     end: Complex64,
+    /// The step size for each pixel in x direction.
     x_step: f64,
+    /// The step size for each pixel in y direction.
     y_step: f64,
+    /// Maximum number of iteration as escape time limit.
     max_iter: u32,
+    /// This holds the image data (pixels) for the final mandelbrot image.
     array2d_chunk: Array2DChunk::<u32>,
+    /// Book keeping chunk list, which node is processing which part of the image.
     chunk_list: ChunkList<ChunkData>,
 }
 
 impl MandelServer {
+    /// Saves the image data to disk with a fancy color scheme.
     fn save_image(&self) {
         let (width, height) = self.array2d_chunk.dimensions();
         let mut buffer = image::ImageBuffer::new(width as u32, height as u32);
@@ -45,6 +59,7 @@ impl MandelServer {
         buffer.save("mandel.png").unwrap();
     }
 
+    /// Checks if the job (calculating the mandelbrot set) is already done.
     fn is_job_done(&self) -> bool {
         let (empty, processing, finished) = self.chunk_list.stats();
         debug!("Job status: empty: {}, processing: {}, finished: {}", empty, processing, finished);
@@ -54,6 +69,9 @@ impl MandelServer {
 }
 
 impl NCServer for MandelServer {
+    /// Every node needs some data to process. Here this data is prepared for each node and some book keeping is saved in the chunks list.
+    /// The whole mandelbrot image is split up into equally sized pieces and processed separatelly.
+    /// Returns the NCJobStatus that is checked by the server.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
@@ -91,6 +109,7 @@ impl NCServer for MandelServer {
         }
     }
 
+    /// If one of the nodes has finished processing the small chunk the server writes the data back to the whole image Array2D.
     fn process_data_from_node(&mut self, node_id: NodeID, node_data: &[u8]) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
@@ -115,15 +134,18 @@ impl NCServer for MandelServer {
         }
     }
 
+    /// If some nodes have crashed or lost the network connection the internal chunks list is updated.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>) {
         self.chunk_list.heartbeat_timeout(&nodes)
     }
 
+    /// When all processing is done the server calls this function. Here we just save the final image to disk.
     fn finish_job(&mut self) {
         self.save_image();
     }
 }
 
+/// Starts the server with the given configuration
 pub fn run_server(options: Mandel1Opt) {
     let configuration = NCConfiguration {
         port: options.port,

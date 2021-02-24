@@ -61,18 +61,20 @@ pub trait NCServer {
     }
     /// This function is called when the node requests new data with the NCNodeMessage::NeedsData message.
     /// It's the servers task to prepare the data for each node individually.
+    /// For exmaple a 2D array can be split up into smaller pieces that are processed by each node.
     /// Usually the server will have an internal data structure containing all the registered nodes.
     /// According to the status of the job this function returns a NCJobStatus value:
     /// Unfinished, Waiting or Finished.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
     /// When one node is done processing the data from the server it will send the result back to the server and then this function is called.
+    /// For example a small piece of a 2D array may be returned by the node and the server puts the resulting data back into the big 2D array.
     fn process_data_from_node(&mut self, node_id: NodeID, data: &[u8]) -> Result<(), NCError>;
     /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heartbeat value in the NCConfiguration)
-    /// then this function is called with the corresponding node id and the node should marked as offline in this function.
+    /// then this function is called with the corresponding node id and the node should be marked as offline in this function.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>);
     /// When all the nodes are done with processing and all internal threads are also finished then this function is called.
-    /// Usually you want to save all the results to disk and optionally you can write an e-mail to the user to get his a** off the couch
-    /// and start writing a paper for his / her PhD.
+    /// Usually you want to save all the results to disk and optionally you can write an e-mail to the user that he / she can start
+    /// writing a paper for his / her PhD.
     fn finish_job(&mut self);
 }
 
