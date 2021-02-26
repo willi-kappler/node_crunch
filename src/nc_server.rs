@@ -110,7 +110,8 @@ pub fn nc_start_server<T: NCServer + Send>(nc_server: T, config: NCConfiguration
 /// The heartbeat check thread is started here in an endless loop.
 /// It calls the function check_heartbeat() which checks the heartbeat time stamp for all nodes.
 /// Also sends the message WakeUpServer to the server itself, in order to exit from the blocking accept() call.
-/// If the job is done the loop will exit.
+/// If the wakeup message could not be sent (IO error) this means that the main loop must have been exited and
+/// the job is done. Thus the heartbeat thread can also exit.
 fn start_heartbeat_thread<'a, T: 'a + NCServer + Send>(scope: &Scope<'a>, heartbeat_duration: u64,
     node_list: NCNodeInfoList, nc_server: Arc<Mutex<T>>, port: u16) {
     debug!("Start start_heartbeat_thread(), heartbeat_duration: {}", heartbeat_duration);

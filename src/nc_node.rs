@@ -14,7 +14,7 @@ use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::NodeID;
-use crate::nc_util::{nc_send_receive_data, nc_send_data, RetryCounter};
+use crate::nc_util::{nc_send_receive_data, nc_send_data};
 
 /// This message is sent from the node to the server in order to register, receive new data and send processed data.
 #[derive(Debug, Serialize, Deserialize)]
@@ -200,5 +200,39 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
     } else {
         error!("Error in get_and_process_data(), NCServerMessage mismatch, expected: JobStatus, got: {:?}", result);
         Err(NCError::ServerMsgMismatch)
+    }
+}
+
+/// Counter for nc_node if connection to server is not possible.
+/// The counter will be decreased every time there is an IO error and if it is zero the function dec_and_check
+/// returns true, otherwise false.
+/// When the connection to the server is working again, the counter is reset to its initial value.
+#[derive(Debug, Clone)]
+pub(crate) struct RetryCounter {
+    init: u64,
+    counter: u64,
+}
+
+impl RetryCounter {
+    /// Create a new retry counter with the given limit.
+    /// It will count backwards to zero.
+    pub(crate) fn new(counter: u64) -> Self {
+        RetryCounter{ init: counter, counter }
+    }
+
+    /// Decrements and checks the counter.
+    /// If it's zero return true, else return false.
+    pub(crate) fn dec_and_check(&mut self) -> bool {
+        if self.counter == 0 {
+            true
+        } else {
+            self.counter -= 1;
+            false
+        }
+    }
+
+    /// Resets the counter to it's initla value.
+    pub(crate) fn reset(&mut self) {
+        self.counter = self.init
     }
 }

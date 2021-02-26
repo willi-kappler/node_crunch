@@ -9,6 +9,7 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Move node_list, nc_server, job_done and config into a separate struct and use a mutex for the new struct.
+// - Add NCServerConnection, NCNodeConnection
 
 mod nc_server;
 mod nc_node;

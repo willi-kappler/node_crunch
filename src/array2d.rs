@@ -78,7 +78,7 @@ impl<T: Clone + Copy> Array2D<T> {
     }
 }
 
-// A data structure that can be split up into several chunks that are send to individual nodes to be processed.
+/// A data structure that can be split up into several chunks that are send to individual nodes to be processed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Array2DChunk<T> {
     /// The width of each individual chunk.

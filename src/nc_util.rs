@@ -8,38 +8,6 @@ use bincode::{deserialize, serialize, serialize_into, deserialize_from};
 
 use crate::nc_error::NCError;
 
-/// Counter for nc_node if connection to server is not possible.
-/// The counter will be decreased every time there is an IO error and if it is zero the function dec_and_check
-/// returns true, otherwise false.
-/// When the connection to the server is working again, the counter is reset to its initial value.
-#[derive(Debug, Clone)]
-pub(crate) struct RetryCounter {
-    init: u64,
-    counter: u64,
-}
-
-impl RetryCounter {
-    pub(crate) fn new(counter: u64) -> Self {
-        RetryCounter{ init: counter, counter }
-    }
-
-    /// Decrements and checks the counter.
-    /// If it's zero return true, else return false.
-    pub(crate) fn dec_and_check(&mut self) -> bool {
-        if self.counter == 0 {
-            true
-        } else {
-            self.counter -= 1;
-            false
-        }
-    }
-
-    /// Resets the counter to it's initla value.
-    pub(crate) fn reset(&mut self) {
-        self.counter = self.init
-    }
-}
-
 /// Encode data to a Vec<u8>
 pub fn nc_encode_data<T: Serialize>(data: &T) -> Result<Vec<u8>, NCError> {
     serialize(data).map_err(|e| NCError::Serialize(e))
