@@ -2,7 +2,7 @@
 //! NodeID is just a newtype pattern for a integer number.
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
-use std::{time::Instant};
+use std::time::Instant;
 use std::fmt;
 
 use rand::random;
@@ -23,8 +23,13 @@ pub(crate) struct NCNodeList {
 }
 
 impl NodeID {
+    /// Create a new temporary node id that will be set later
+    pub(crate) fn unset() -> Self {
+        NodeID(0)
+    }
+
     /// Create a new random node id.
-    pub fn random() -> Self {
+    pub(crate) fn random() -> Self {
         NodeID(random())
     }
 }
@@ -37,17 +42,17 @@ impl fmt::Display for NodeID {
 
 impl NCNodeInfo {
     /// Create a new node info with the given node id and the current time stamp.
-    pub fn new(node_id: NodeID) -> Self {
+    pub(crate) fn new(node_id: NodeID) -> Self {
         NCNodeInfo{ node_id, instant: Instant::now() }
     }
 
     /// When a node sends a valid heartbeat update the time stamp for that node.
-    pub fn update_heartbeat(&mut self) {
+    pub(crate) fn update_heartbeat(&mut self) {
         self.instant = Instant::now();
     }
 
     /// Check if the heartbeat for the node is invalid using the given time range.
-    pub fn heartbeat_invalid(&self, limit: u64) -> bool {
+    pub(crate) fn heartbeat_invalid(&self, limit: u64) -> bool {
         let diff = Instant::now() - self.instant;
         diff.as_secs() > limit
     }

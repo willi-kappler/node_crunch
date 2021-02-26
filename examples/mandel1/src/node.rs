@@ -2,7 +2,7 @@ use log::{info, error};
 use num::complex::Complex64;
 
 use node_crunch::{NCNode, NCError, NCConfiguration, Array2D,
-    nc_start_node, nc_decode_data, nc_encode_data};
+    NCNodeStarter, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -51,8 +51,9 @@ pub fn run_node(options: Mandel1Opt) {
     };
 
     let node = MandelNode{};
+    let mut node_starter = NCNodeStarter::new(configuration);
 
-    match nc_start_node(node, configuration) {
+    match node_starter.start(node) {
         Ok(_) => {
             info!("Calculation finished");
         }

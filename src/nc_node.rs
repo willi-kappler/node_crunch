@@ -55,151 +55,319 @@ pub trait NCNode {
     fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError>;
 }
 
-/// The main entry point for the code that runs on all nodes.
-/// You give it your own user defined data structure that implements the NCNode trait and the configuration
-/// Everything else is done automatically for you.
-/// The NCNode trait function set_initial_data() is called here once in order to set the node id and some optional data that is
-/// the same for all nodes at the beginning.
-pub fn nc_start_node<T: NCNode>(mut nc_node: T, config: NCConfiguration) -> Result<(), NCError> {
-    debug!("Start nc_start_node()");
-
-    let ip_addr: IpAddr = config.address.parse()?;
-    let socket_addr = SocketAddr::new(ip_addr, config.port);
-    let (node_id, initial_data) = get_initial_data(&socket_addr)?;
-
-    nc_node.set_initial_data(node_id, initial_data)?;
-
-    let retry_counter = RetryCounter::new(config.retry_counter);
-
-    crossbeam::scope(|scope|{
-        start_heartbeat_thread(scope, node_id, socket_addr, Duration::from_secs(config.heartbeat), retry_counter.clone());
-        start_main_loop(nc_node, socket_addr, config, node_id, retry_counter);
-    }).unwrap();
-
-    info!("Job done, exit now");
-    Ok(())
+/// Main data structure for managing and starting the computaion on the nodes.
+pub struct NCNodeStarter {
+    /// Configuration for the server and the node.
+    config: NCConfiguration,
 }
 
-/// This is called once at the beginning of nc_start_node().
-/// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
-/// On succeeded it returns the new assigned node id for this node and an optional initial data.
-/// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
-fn get_initial_data(socket_addr: &SocketAddr) -> Result<(NodeID, Option<Vec<u8>>), NCError> {
-    debug!("Start get_initial_data(), socket_addr: {}", socket_addr);
+impl NCNodeStarter {
+    /// Create a new NCNodeStarter using the given configuration
+    pub fn new(config: NCConfiguration) -> Self {
+        debug!("NCNodeStarter::new()");
 
-    let initial_data = nc_send_receive_data(&NCNodeMessage::Register, socket_addr)?;
-
-    match initial_data {
-        NCServerMessage::InitialData(node_id, initial_data) => {
-            info!("Got node_id: {} and initial data from server", node_id);
-            Ok((node_id, initial_data))
-        }
-        msg => {
-            error!("Error in get_initial_data(), NCServerMessage mismatch, expected: InitialData, got: {:?}", msg);
-            Err(NCError::ServerMsgMismatch)
-        }
+        NCNodeStarter{ config }
     }
-}
 
-/// The heartbeat thread that runs in the background and sends heartbeat messages to the server is started here.
-/// It does this every n seconds which can be configured in the NCConfiguration data structure.
-/// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
-/// and gives another node the same data chunk to process.
-fn start_heartbeat_thread(scope: &Scope, node_id: NodeID, socket_addr: SocketAddr, heartbeat_duration: Duration, mut retry_counter: RetryCounter) {
-    debug!("Start start_heartbeat_thread(), node_id: {}, heartbeat_duration: {}", node_id, heartbeat_duration.as_secs());
+    /// The main entry point for the code that runs on all nodes.
+    /// You give it your own user defined data structure that implements the NCNode trait.
+    /// Everything else is done automatically for you.
+    /// The NCNode trait function set_initial_data() is called here once in order to set the node id and some optional data that is
+    /// send to all nodes at the beginning.
+    pub fn start<T: NCNode>(&mut self, nc_node: T) -> Result<(), NCError> {
+        debug!("NCNodeStarter::start()");
 
-    scope.spawn(move |_| {
+        let ip_addr: IpAddr = self.config.address.parse()?;
+        let server_addr = SocketAddr::new(ip_addr, self.config.port);
+
+        let mut node_process = NodeProcess::new(server_addr, nc_node,
+self.config.delay_request_data, self.config.retry_counter);
+        node_process.get_initial_data()?;
+
+        let node_heartbeat = NodeHeartbeat::new(server_addr, node_process.node_id,
+            self.config.retry_counter, self.config.heartbeat);
+
+        crossbeam::scope(|scope|{
+            self.start_heartbeat_thread(scope, node_heartbeat);
+            self.start_main_loop(node_process);
+        }).unwrap();
+
+        info!("Job done, exit now");
+        Ok(())
+    }
+
+    /// The heartbeat thread that runs in the background and sends heartbeat messages to the server is started here.
+    /// It does this every n seconds which can be configured in the NCConfiguration data structure.
+    /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
+    /// and gives another node the same data chunk to process.
+    fn start_heartbeat_thread(&self, scope: &Scope, mut node_heartbeat: NodeHeartbeat) {
+        debug!("NCNodeStarter::start_heartbeat_thread()");
+
+        scope.spawn(move |_| {
+            loop {
+                node_heartbeat.sleep();
+
+                if let Err(e) = node_heartbeat.send_heartbeat_message() {
+                    error!("Error in send_heartbeat(): {}, retry_counter: {}", e, node_heartbeat.get_counter());
+
+                    if node_heartbeat.dec_and_check_counter() {
+                        debug!("Retry counter is zero, will exit now");
+                        break
+                    }
+
+                } else {
+                    // Reset the counter if message was sent sucessfully
+                    node_heartbeat.reset_counter();
+                }
+            }
+        });
+
+        debug!("Heartbeat loop finished")
+    }
+
+    /// Here is main loop for this node. It keeps requesting and processing data until the server
+    /// sends a NCJobStatus::Finished message to this node.
+    /// If there is an error this node will wait n seconds before it tries to reconnect to the server.
+    /// The delay time can be configured in the NCConfiguration data structure.
+    /// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
+    /// The counter can be configured in the NCConfiguration.
+    fn start_main_loop<T: NCNode>(&self, mut node_process: NodeProcess<T>) {
+        debug!("NCNodeStarter::start_main_loop()");
+
         loop {
-            thread::sleep(heartbeat_duration);
+            debug!("Ask server for new data");
 
-            if let Err(e) = nc_send_data(&NCNodeMessage::HeartBeat(node_id), &socket_addr) {
-                error!("Error in nc_send_data(): {}, retry_counter: {:?}", e, retry_counter);
+            if let Err(e) = node_process.get_and_process_data() {
+                error!("Error in get_and_process_data(): {}, retry counter: {:?}", e, node_process.get_counter());
 
-                if retry_counter.dec_and_check() {
+                if node_process.dec_and_check_counter() {
                     debug!("Retry counter is zero, will exit now");
                     break
                 }
+
+                debug!("Will wait before retry (delay_request_data: {} sec)", node_process.get_delay());
+                node_process.sleep();
             } else {
                 // Reset the counter if message was sent sucessfully
-                retry_counter.reset()
+                node_process.reset_counter()
             }
         }
-    });
+
+        debug!("Main loop finished")
+    }
 }
 
-/// Here is main loop for this node. It keeps requesting and processing data until the server
-/// sends a NCJobStatus::Finished message to this node.
-/// If there is an error this node will wait n seconds before it tries to reconnect to the server.
-/// The delay time can be configured in the NCConfiguration data structure.
-/// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
-/// The counter can be configured in the NCConfiguration.
-fn start_main_loop<T: NCNode>(mut nc_node: T, socket_addr: SocketAddr, config: NCConfiguration, node_id: NodeID, mut retry_counter: RetryCounter) {
-    debug!("Start start_main_loop(), socket_addr: {}, node_id: {}", socket_addr, node_id);
+/// Manages and sends heartbeat messages to the server.
+struct NodeHeartbeat {
+    /// IP address and port of the server.
+    server_addr: SocketAddr,
+    /// The node id for this node,
+    node_id: NodeID,
+    /// How often should the heartbeat thread try to contact the server before giving up.
+    retry_counter: RetryCounter,
+    /// Send every heartbeat_duration seconds the xxx message to the server.
+    heartbeat_duration: Duration,
+}
 
-    let duration = Duration::from_secs(config.delay_request_data);
+impl NodeHeartbeat {
+    /// Creats a new NodeHeartbeat with the given arguments.
+    fn new(server_addr: SocketAddr, node_id: NodeID, retry_counter: u64, heartbeat_duration: u64) -> Self {
+        debug!("NodeHeartbeat::new()");
 
-    loop {
-        debug!("Ask server for new data");
-
-        if let Err(e) = get_and_process_data(&mut nc_node, socket_addr, node_id, duration) {
-            error!("Error in get_and_process_data(): {}, retry counter: {:?}", e, retry_counter);
-
-            if retry_counter.dec_and_check() {
-                debug!("Retry counter is zero, will exit now");
-                break
-            }
-
-            debug!("Will wait before retry (delay_request_data: {} sec)", duration.as_secs());
-            thread::sleep(duration);
-        } else {
-            // Reset the counter if message was sent sucessfully
-            retry_counter.reset()
+        NodeHeartbeat {
+            server_addr,
+            node_id,
+            retry_counter: RetryCounter::new(retry_counter),
+            heartbeat_duration: Duration::from_secs(heartbeat_duration),
         }
     }
 
-    debug!("Main loop finished")
+    /// The heartbeat thread will sleep for the given duration from the configuration.
+    fn sleep(&self) {
+        debug!("NodeHeartbeat::sleep()");
+
+        thread::sleep(self.heartbeat_duration);
+    }
+
+    /// Send the NCNodeMessage::HeartBeat message to the server.
+    fn send_heartbeat_message(&self) -> Result<(), NCError> {
+        debug!("NodeHeartbeat::send_heartbeat_message()");
+
+        nc_send_data(&NCNodeMessage::HeartBeat(self.node_id), &self.server_addr)
+    }
+
+    /// Returns the current value of the retry counter.
+    fn get_counter(&self) -> u64 {
+        debug!("NodeHeartbeat::get_counter()");
+
+        self.retry_counter.counter
+    }
+
+    /// Decrement the retry counter on error and check if it is zero.
+    /// If zero return true, else false.
+    fn dec_and_check_counter(&mut self) -> bool {
+        debug!("NodeHeartbeat::dec_and_check_counter()");
+
+        self.retry_counter.dec_and_check()
+    }
+
+    /// Resets the retry counter to the initial value when there was no error.
+    fn reset_counter(&mut self) {
+        debug!("NodeHeartbeat::reset_counter()");
+
+        self.retry_counter.reset()
+    }
 }
 
-/// This function sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
-/// Only one message is expected as a response from the server: NCServerMessage::JobStatus. This status can have two values
-/// 1. NCJobStatus::Unfinished: This means that the job is note done and there is still some more data to be processed.
-///      This node will then process the data calling the process_data_from_server() function and sends the data back to the
-///      server using the NCNodeMessage::HasData message.
-/// 2. NCJobStatus::Waiting: This means that not all nodes are done and the server is still waiting for all nodes to finish.
-/// If the server sends a different message this function will return a NCError::ServerMsgMismatch error.
-fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, node_id: NodeID, duration: Duration) -> Result<(), NCError> {
-    debug!("Start get_and_process_data(), socket_addr: {}, node_id: {}", socket_addr, node_id);
+/// Communication with the server and processing of data.
+struct NodeProcess<T> {
+    /// IP address and port of the server.
+    server_addr: SocketAddr,
+    /// The suer defined data structure that implements the NCNode trait.
+    nc_node: T,
+    /// The node id for this node,
+    node_id: NodeID,
+    /// How often should the main processing loop try to contact the server before giving up.
+    retry_counter: RetryCounter,
+    /// In case of IO error wait delay_duration seconds before trying to contact the server again.
+    delay_duration: Duration,
+}
 
-    let result = nc_send_receive_data(&NCNodeMessage::NeedsData(node_id), &socket_addr)?;
+impl<T: NCNode> NodeProcess<T> {
+    /// Creates a new NodeProcess with the given arguments.
+    fn new(server_addr: SocketAddr, nc_node: T, delay_duration: u64, retry_counter: u64) -> Self {
+        debug!("NodeProcess::new()");
 
-    if let NCServerMessage::JobStatus(job_status) = result {
-        match job_status {
-            NCJobStatus::Unfinished(data) => {
-                debug!("New data received from server");
-                let result = nc_node.process_data_from_server(&data)?;
-                debug!("Send processed data to server");
-                nc_send_data(&NCNodeMessage::HasData(node_id, result), &socket_addr)
-            }
-            NCJobStatus::Waiting => {
-                // The node will not exit here since the job is not 100% done.
-                // This just means that all the remaining work has already
-                // been distributed among all nodes.
-                // One of the nodes can still crash and thus free nodes have to ask the server for more work
-                // from time to time (delay_request_data).
+        NodeProcess{
+            server_addr,
+            nc_node,
+            // This will be set in the function get_initial_data()
+            node_id: NodeID::unset(),
+            retry_counter: RetryCounter::new(retry_counter),
+            delay_duration: Duration::from_secs(delay_duration),
+        }
+    }
 
-                debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", duration.as_secs());
-                thread::sleep(duration);
-                Ok(())
+    /// This is called once at the beginning of NCNodeStarter::start().
+    /// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
+    /// On success it sets the new assigned node id for this node and calls the NCNode trait function set_initial_data().
+    /// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
+    fn get_initial_data(&mut self) -> Result<(), NCError> {
+        debug!("NodeProcess::get_initial_data()");
+
+        let initial_data = self.send_register_message()?;
+
+        match initial_data {
+            NCServerMessage::InitialData(node_id, initial_data) => {
+                info!("Got node_id: {} and initial data from server", node_id);
+                self.node_id = node_id;
+                self.nc_node.set_initial_data(node_id, initial_data)
             }
             msg => {
-                // The server does not bother sending the node a NCJobStatus::Finished message.
-                error!("Error: unexpected message from server: {:?}", msg);
+                error!("Error in get_initial_data(), NCServerMessage mismatch, expected: InitialData, got: {:?}", msg);
                 Err(NCError::ServerMsgMismatch)
             }
         }
-    } else {
-        error!("Error in get_and_process_data(), NCServerMessage mismatch, expected: JobStatus, got: {:?}", result);
-        Err(NCError::ServerMsgMismatch)
+    }
+
+    /// Send the NCNodeMessage::Register message to the server.
+    fn send_register_message(&self) -> Result<NCServerMessage, NCError> {
+        debug!("NodeProcess::send_register_message()");
+
+        nc_send_receive_data(&NCNodeMessage::Register, &self.server_addr)
+    }
+
+    /// This function sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
+    /// Only one message is expected as a response from the server: NCServerMessage::JobStatus. This status can have two values
+    /// 1. NCJobStatus::Unfinished: This means that the job is note done and there is still some more data to be processed.
+    ///      This node will then process the data calling the process_data_from_server() function and sends the data back to the
+    ///      server using the NCNodeMessage::HasData message.
+    /// 2. NCJobStatus::Waiting: This means that not all nodes are done and the server is still waiting for all nodes to finish.
+    /// If the server sends a different message this function will return a NCError::ServerMsgMismatch error.
+    fn get_and_process_data(&mut self) -> Result<(), NCError> {
+        debug!("NodeProcess::get_and_process_data()");
+
+        let new_data = self.send_needs_data_message()?;
+
+        if let NCServerMessage::JobStatus(job_status) = new_data {
+            match job_status {
+                NCJobStatus::Unfinished(data) => {
+                    self.process_data_and_send_has_data_message(&data)
+                }
+                NCJobStatus::Waiting => {
+                    // The node will not exit here since the job is not 100% done.
+                    // This just means that all the remaining work has already
+                    // been distributed among all nodes.
+                    // One of the nodes can still crash and thus free nodes have to ask the server for more work
+                    // from time to time (delay_request_data).
+
+                    debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", self.get_delay());
+                    self.sleep();
+                    Ok(())
+                }
+                msg => {
+                    // The server does not bother sending the node a NCJobStatus::Finished message.
+                    error!("Error: unexpected message from server: {:?}", msg);
+                    Err(NCError::ServerMsgMismatch)
+                }
+            }
+        } else {
+            error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch, expected: JobStatus, got: {:?}", new_data);
+            Err(NCError::ServerMsgMismatch)
+        }
+    }
+
+    /// Send the NCNodeMessage::NeedsData message to the server.
+    fn send_needs_data_message(&self) -> Result<NCServerMessage, NCError> {
+        debug!("NodeProcess::send_needs_data_message()");
+
+        nc_send_receive_data(&NCNodeMessage::NeedsData(self.node_id), &self.server_addr)
+    }
+
+    /// Process the new data from the server and sends the result back to the server using
+    /// the NCNodeMessage::HasData message.
+    fn process_data_and_send_has_data_message(&mut self, data: &[u8]) -> Result<(), NCError> {
+        debug!("NodeProcess::process_data_and_send_has_data_message()");
+
+        let result = self.nc_node.process_data_from_server(data)?;
+
+        nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr)
+    }
+
+    /// Returns the current value of the retry counter.
+    fn get_counter(&self) -> u64 {
+        debug!("NodeProcess::get_counter()");
+
+        self.retry_counter.counter
+    }
+
+    /// Decrement the retry counter on error and check if it is zero.
+    /// If zero return true, else false.
+    fn dec_and_check_counter(&mut self) -> bool {
+        debug!("NodeProcess::dec_and_check_counter()");
+
+        self.retry_counter.dec_and_check()
+    }
+
+    /// Returns the delay duration in seconds.
+    fn get_delay(&self) -> u64 {
+        debug!("NodeProcess::get_delay()");
+
+        self.delay_duration.as_secs()
+    }
+
+    /// The current thread in the main loop sleeps for the given delay from the configuration file.
+    fn sleep(&self) {
+        debug!("NodeProcess::sleep()");
+
+        thread::sleep(self.delay_duration);
+    }
+
+    /// Resets the retry counter to the initial value when there was no error.
+    fn reset_counter(&mut self) {
+        debug!("NodeProcess::reset_counter()");
+
+        self.retry_counter.reset()
     }
 }
 
@@ -208,7 +376,7 @@ fn get_and_process_data<T: NCNode>(nc_node: &mut T, socket_addr: SocketAddr, nod
 /// returns true, otherwise false.
 /// When the connection to the server is working again, the counter is reset to its initial value.
 #[derive(Debug, Clone)]
-pub(crate) struct RetryCounter {
+struct RetryCounter {
     init: u64,
     counter: u64,
 }
@@ -216,13 +384,13 @@ pub(crate) struct RetryCounter {
 impl RetryCounter {
     /// Create a new retry counter with the given limit.
     /// It will count backwards to zero.
-    pub(crate) fn new(counter: u64) -> Self {
+    fn new(counter: u64) -> Self {
         RetryCounter{ init: counter, counter }
     }
 
     /// Decrements and checks the counter.
     /// If it's zero return true, else return false.
-    pub(crate) fn dec_and_check(&mut self) -> bool {
+    fn dec_and_check(&mut self) -> bool {
         if self.counter == 0 {
             true
         } else {
@@ -232,7 +400,7 @@ impl RetryCounter {
     }
 
     /// Resets the counter to it's initla value.
-    pub(crate) fn reset(&mut self) {
+    fn reset(&mut self) {
         self.counter = self.init
     }
 }

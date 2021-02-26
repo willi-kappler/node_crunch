@@ -9,7 +9,7 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Move node_list, nc_server, job_done and config into a separate struct and use a mutex for the new struct.
-// - Add NCServerConnection, NCNodeConnection
+// - Add NCServerConnection
 
 mod nc_server;
 mod nc_node;
@@ -20,7 +20,7 @@ mod nc_util;
 mod array2d;
 
 pub use nc_server::{NCServer, NCJobStatus, nc_start_server};
-pub use nc_node::{NCNode, nc_start_node};
+pub use nc_node::{NCNode, NCNodeStarter};
 pub use nc_node_info::NodeID;
 pub use nc_error::NCError;
 pub use nc_config::NCConfiguration;
