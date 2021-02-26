@@ -39,6 +39,7 @@ pub trait NCNode {
     /// Then this function is called with the data received from the server.
     fn set_initial_data(&mut self, node_id: NodeID, initial_data: Option<Vec<u8>>) -> Result<(), NCError> {
         debug!("Got new node id: {}", node_id);
+
         match initial_data {
             Some(_) => debug!("Got some initial data from the server."),
             None => debug!("Got no initial data from the server.")
@@ -385,12 +386,16 @@ impl RetryCounter {
     /// Create a new retry counter with the given limit.
     /// It will count backwards to zero.
     fn new(counter: u64) -> Self {
+        debug!("RetryCounter::new()");
+
         RetryCounter{ init: counter, counter }
     }
 
     /// Decrements and checks the counter.
     /// If it's zero return true, else return false.
     fn dec_and_check(&mut self) -> bool {
+        debug!("RetryCounter::dec_and_check()");
+
         if self.counter == 0 {
             true
         } else {
@@ -399,8 +404,10 @@ impl RetryCounter {
         }
     }
 
-    /// Resets the counter to it's initla value.
+    /// Resets the counter to it's inital value.
     fn reset(&mut self) {
+        debug!("RetryCounter::reset()");
+
         self.counter = self.init
     }
 }
