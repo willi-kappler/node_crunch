@@ -107,7 +107,6 @@ impl NCServerStarter {
 
         let time_taken = (Instant::now() - time_start).as_secs_f64();
 
-        info!("Job done, exit now");
         info!("Time taken: {} s, {} min, {} h", time_taken, time_taken / 60.0, time_taken / (60.0 * 60.0));
 
         Ok(())
@@ -169,6 +168,9 @@ impl NCServerStarter {
                 break
             }
         }
+
+        info!("Job is done, will call NCServer::finish_job()");
+        server_process.nc_server.lock().unwrap().finish_job();
     }
     /// This starts a new thread for each node that sends a message to the server and calls the handle_node() function in that thread.
     fn start_node_thread<'a, T: 'a + NCServer + Send>(&self, scope: &Scope<'a>, stream: TcpStream, server_process: Arc<ServerProcess<T>>) {
