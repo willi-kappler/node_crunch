@@ -19,7 +19,7 @@ mod nc_config;
 mod nc_util;
 mod array2d;
 
-pub use nc_server::{NCServer, NCJobStatus, nc_start_server};
+pub use nc_server::{NCServer, NCJobStatus, NCServerStarter};
 pub use nc_node::{NCNode, NCNodeStarter};
 pub use nc_node_info::NodeID;
 pub use nc_error::NCError;

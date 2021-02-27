@@ -4,7 +4,7 @@ use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
     Array2DChunk, ChunkList, NodeID,
-    nc_start_server, nc_decode_data, nc_encode_data};
+    NCServerStarter, nc_decode_data, nc_encode_data};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -172,7 +172,9 @@ pub fn run_server(options: Mandel1Opt) {
         start, end, x_step, y_step, max_iter, array2d_chunk, chunk_list,
     };
 
-    match nc_start_server(server, configuration) {
+    let mut server_starter = NCServerStarter::new(configuration);
+
+    match server_starter.start(server) {
         Ok(_) => {
             info!("Calculation finished");
         }

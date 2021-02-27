@@ -28,8 +28,9 @@ pub(crate) enum NCNodeMessage {
     HasData(NodeID, Vec<u8>),
     /// This node sends a heartbeat message every n seconds. The time span between two heartbeats is set in the configuration NCConfiguration.
     HeartBeat(NodeID),
-    /// This is a message that the server sends to itself to break out from blocking on node connection via accept()
-    WakeUpServer,
+    /// This is a message that the server sends to itself to break out from blocking on node connection via accept() and
+    /// start checking the heartbeat time stamps of all nodes.
+    CheckHeartbeat,
 }
 
 // TODO: Generic trait, U for data in, V for data out
