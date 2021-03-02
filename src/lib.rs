@@ -8,8 +8,8 @@
 // - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
-// - Move node_list, nc_server, job_done and config into a separate struct and use a mutex for the new struct.
-// - Add NCServerConnection
+// - Use generic data instead of Vec<u8> ?
+// - Better error handling ?
 
 mod nc_server;
 mod nc_node;

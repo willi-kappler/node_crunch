@@ -379,7 +379,9 @@ impl<T: NCNode> NodeProcess<T> {
 /// When the connection to the server is working again, the counter is reset to its initial value.
 #[derive(Debug, Clone)]
 struct RetryCounter {
+    /// The initial value for the counter. It can be resetted to this value when a message has been send / received sucessfully.
     init: u64,
+    /// The current value for the counter. It will be decremented in an IO error case.
     counter: u64,
 }
 
