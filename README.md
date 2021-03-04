@@ -7,22 +7,34 @@ Allows to distribute computations across several nodes.
 
 - [Node Crunch](#node-crunch)
   - [Table of contents](#table-of-contents)
-  - [Introduction](#introduction-)
-  - [Server example](#server-example-)
-  - [Node example](#node-example-)
-  - [How to start the application](#how-to-start-the-application-)
-  - [Full working examples](#full-working-examples-)
-  - [How does it compare to *x* ?](#how-does-it-compare-to-x--)
+  - [Features](#features)
+  - [Introduction](#introduction)
+  - [Server example](#server-example)
+  - [Node example](#node-example)
+  - [How to start the application](#how-to-start-the-application)
+    - [Manually](#manually)
+    - [Using SLURM / sbatch](#using-slurm--sbatch)
+    - [Using Torq / Moab / qsub](#using-torq--moab--qsub)
+  - [Full working examples](#full-working-examples)
+  - [How does it compare to *x* ?](#how-does-it-compare-to-x-)
     - [MPI](#mpi)
     - [BOINC](#boinc)
-  - [TODO](#todo-)
-  - [FAQ](#faq-)
-  - [License](#license-)
+  - [TODO](#todo)
+  - [FAQ](#faq)
+  - [License](#license)
+
+## Features
+
+**Note 1:** *It is still in development and the API may change.*
+**Note 2:** *The communication between the server and the nodes are not encrypted and there is no authentication, so use this in a trusted environment only!*
+
+- 100% safe Rust.
+- Easy to use API.
+- If one of the nodes crashes the server and all other nodes can still continue with their work. (Internally heartbeat messages are used.)
+- While running the user application more nodes can be added to speed up computation even more.
+- The nodes can be a mixture of different OS and hardware achitecture. If it compiles it runs.
 
 ## Introduction
-
-**Note:** *it is still in development and the API may change.*
-**Note 2:** *the communication between the server and the nodes are not encrypted, so use this in a trusted environment only!*
 
 Node Crunch is a crate that allows users to write distributed code easily. The code is organized in a two main parts: one for the server and one for the node.
 
@@ -144,6 +156,8 @@ match node_starter.start(node) {
 
 ## How to start the application
 
+### Manually
+
 Usually there is one binary for both the server and the node code. You just specify which mode is used for example via the command line. Since there is only one server and lots of nodes, the node mode should be the default:
 
 ```bash
@@ -170,9 +184,18 @@ fn main() {
 }
 ```
 
+### Using SLURM / sbatch
+
+If you're using a HPC (high performance cluster) you will run new jobs through a job scheduler.
+The mostly used one (at least in the top500 list) is SLURM.
+
+### Using Torq / Moab / qsub
+
+Another commonly used job scheduler is Torq.
+
 ## Full working examples
 
-It looks complicated at first but there are a couple of examples that show how to use it in "real world" applications:
+Using the two traits looks complicated at first but there are a couple of examples that show how to use it in "real world" applications:
 
 - Distributed Mandelbrot
 - Distributed Path Tracing
@@ -186,6 +209,7 @@ It looks complicated at first but there are a couple of examples that show how t
 Node Crunch only works with Rust and is still in development.
 Writing correct code in MPI is difficult and if one of the nodes crash all other nodes (including the main node) will be terminated. Node Crunch on the other hand doesn't care if one of the nodes crash. The heartbeat system detect if one of the nodes is no longer available and the server continues with the other nodes. Rust makes it very easy to write correct code, the user doesn't have to take care of synchronization and other things and can fully concentrate on the computing part.
 The number of nodes in MPI is fixed the whole time once the application has started, whereas with Node Crunch you can add more and more nodes while it's running if needed.
+Using MPI you are limited what kind of CPU / architecture / operating system you use when you want to run your application on a cluster. With Node Crunch you can mix different OS, CPUs and job scheduler as needed. You just have to compile the node code for each OS / hardware you want tu use.
 
 ### BOINC
 
@@ -210,7 +234,7 @@ Other things that need to be done in the next releases:
 
 - Where does the name come from ? Compute *node* and number *crunching*.
 - Will you add feature *x* ? It depends, if it makes sense and helps other users as well.
-- Can I use [Rayon](https://github.com/rayon-rs/rayon) and / or GPGPU with Node Crunch ? Yes of course, no problem.
+- Can I use [Rayon](https://github.com/rayon-rs/rayon) and / or GPGPU with Node Crunch ? Yes of course, no problem. Have a look at the mandel2 example.
 
 ## License
 

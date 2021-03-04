@@ -209,7 +209,7 @@ impl<T> Chunk<T> {
     }
 }
 
-/// A list of chunks and some helper functions.
+/// A list of chunks and some helper methodss.
 #[derive(Debug, Clone)]
 pub struct ChunkList<T> {
     chunks: Vec<Chunk<T>>

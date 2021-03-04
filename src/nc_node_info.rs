@@ -64,12 +64,12 @@ impl NCNodeList {
     }
 
     /// All the registered nodes are checked here. If the heartbeat time stamp is too old (> 2 * heartbeat in NCConfiguration) then
-    /// the NCServer trait function heartbeat_timeout() is called where the node should be marked as offline.
+    /// the NCServer trait method heartbeat_timeout() is called where the node should be marked as offline.
     pub(crate) fn check_heartbeat(&self, heartbeat_duration: u64) -> impl Iterator<Item=NodeID> + '_ {
         self.nodes.iter().filter(move |node| node.heartbeat_invalid(heartbeat_duration)).map(|node| node.node_id)
     }
 
-    /// This function generates a new and unique node id for a new node that has just registered with the server.
+    /// This method generates a new and unique node id for a new node that has just registered with the server.
     /// It loops through the list of all nodes and checks wether the new id is already taken. If yes a new random id
     /// will be created and re-checked with the node list.
     pub(crate) fn register_new_node(&mut self) -> NodeID {

@@ -139,7 +139,7 @@ impl NCServer for MandelServer {
         self.chunk_list.heartbeat_timeout(&nodes)
     }
 
-    /// When all processing is done the server calls this function. Here we just save the final image to disk.
+    /// When all processing is done the server calls this method. Here we just save the final image to disk.
     fn finish_job(&mut self) {
         self.save_image();
     }
