@@ -272,8 +272,6 @@ impl<T: NCServer> ServerProcess<T> {
 
         let request: NCNodeMessage = nc_receive_data(&mut stream)?;
 
-        debug!("ServerProcess::handle_node(), request received");
-
         match request {
             NCNodeMessage::Register => {
                 let node_id = self.node_list.lock()?.register_new_node();
@@ -289,7 +287,6 @@ impl<T: NCServer> ServerProcess<T> {
                     NCJobStatus::Unfinished(data) => {
                         debug!("Send data to node");
                         self.send_job_status_unfinished_message(data, stream)?;
-                        debug!("Data has been sent to node");
                     }
                     NCJobStatus::Waiting => {
                         debug!("Waiting for other nodes to finish");
