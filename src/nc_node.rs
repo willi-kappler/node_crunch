@@ -332,14 +332,7 @@ impl<T: NCNode> NodeProcess<T> {
         debug!("NodeProcess::process_data_and_send_has_data_message()");
 
         let result = self.nc_node.process_data_from_server(data)?;
-
-        debug!("NodeProcess::process_data_and_send_has_data_message(), data has been processed.");
-
-        let result = nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr);
-
-        debug!("NodeProcess::process_data_and_send_has_data_message(), data has been send.");
-
-        result
+        nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr)
     }
 
     /// Returns the current value of the retry counter.
