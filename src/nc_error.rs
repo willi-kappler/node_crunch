@@ -11,6 +11,8 @@ pub enum NCError {
     IPAddrParse(net::AddrParseError),
     /// Common IO error, usually network related.
     IOError(io::Error),
+    /// Error when reading from socket, connection closed by the other side.
+    ConnectionClosed,
     /// Data could not be serialized for sending over the network.
     Serialize(bincode::Error),
     /// Data comming from the network could not be deserialized.
@@ -36,6 +38,7 @@ impl fmt::Display for NCError {
         match self {
             NCError::IPAddrParse(e) => write!(f, "IP address parse error: {}", e),
             NCError::IOError(e) => write!(f, "IO error: {}", e),
+            NCError::ConnectionClosed => write!(f, "Connection closed by the other side"),
             NCError::Serialize(e) => write!(f, "Serialize bincode error: {}", e),
             NCError::Deserialize(e) => write!(f, "Deserialize bincode error: {}", e),
             NCError::Bincode(e) => write!(f, "Bincode error: {}", e),
@@ -54,6 +57,7 @@ impl error::Error for NCError {
         match self {
             NCError::IPAddrParse(e) => Some(e),
             NCError::IOError(e) => Some(e),
+            NCError::ConnectionClosed => None,
             NCError::Serialize(e) => Some(e),
             NCError::Deserialize(e) => Some(e),
             NCError::Bincode(e) => Some(e),
