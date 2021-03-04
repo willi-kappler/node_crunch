@@ -122,9 +122,9 @@ self.config.delay_request_data, self.config.retry_counter);
                     node_heartbeat.reset_counter();
                 }
             }
-        });
 
-        debug!("Heartbeat loop finished")
+            debug!("Heartbeat loop finished")
+        });
     }
 
     /// Here is main loop for this node. It keeps requesting and processing data until the server
@@ -333,7 +333,13 @@ impl<T: NCNode> NodeProcess<T> {
 
         let result = self.nc_node.process_data_from_server(data)?;
 
-        nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr)
+        debug!("NodeProcess::process_data_and_send_has_data_message(), data has been processed.");
+
+        let result = nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr);
+
+        debug!("NodeProcess::process_data_and_send_has_data_message(), data has been send.");
+
+        result
     }
 
     /// Returns the current value of the retry counter.

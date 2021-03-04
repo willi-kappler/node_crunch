@@ -272,6 +272,8 @@ impl<T: NCServer> ServerProcess<T> {
 
         let request: NCNodeMessage = nc_receive_data(&mut stream)?;
 
+        debug!("ServerProcess::handle_node(), request received");
+
         match request {
             NCNodeMessage::Register => {
                 let node_id = self.node_list.lock()?.register_new_node();
