@@ -3,6 +3,7 @@
 //! that can be sent to the node in order to process them.
 
 use std::{error, fmt};
+use std::slice::{Chunks, ChunksMut};
 
 use serde::{Serialize, Deserialize};
 
@@ -68,13 +69,25 @@ impl<T: Clone + Copy> Array2D<T> {
         self.data[index] = value;
     }
 
-    // Sets a whole 2D region of data values.
+    /// Sets a whole 2D region of data values.
     pub fn set_region(&mut self, dest_x: u64, dest_y: u64, source: &Array2D<T>) {
         for x in 0..source.width {
             for y in 0..source.height {
                 self.set(dest_x + x, dest_y + y, source.get(x, y))
             }
         }
+    }
+
+    /// Returns an iterator over all rows.
+    /// This can be used with rayons par_bridge() for example.
+    pub fn split_rows(&self) -> Chunks<'_, T> {
+        self.data.chunks(self.width as usize)
+    }
+
+    /// Returns a mutable iterator over all rows.
+    /// This can be used with rayons par_bridge() for example.
+    pub fn split_row_mut(&mut self) -> ChunksMut<'_, T> {
+        self.data.chunks_mut(self.width as usize)
     }
 }
 
@@ -209,7 +222,7 @@ impl<T> Chunk<T> {
     }
 }
 
-/// A list of chunks and some helper methodss.
+/// A list of chunks and some helper methods.
 #[derive(Debug, Clone)]
 pub struct ChunkList<T> {
     chunks: Vec<Chunk<T>>
