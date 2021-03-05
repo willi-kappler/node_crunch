@@ -310,7 +310,7 @@ impl<T: NCServer> ServerProcess<T> {
                 self.nc_server.lock()?.process_data_from_node(node_id, &data)?;
             }
             NCNodeMessage::CheckHeartbeat => {
-                debug!("Messag CheckHeartbeat received!");
+                debug!("Message CheckHeartbeat received!");
                 // Check the heartbeat for all the nodes and call the trait method heartbeat_timeout()
                 // with those nodes to react accordingly.
                 let nodes = self.node_list.lock()?.check_heartbeat(self.config.heartbeat).collect::<Vec<NodeID>>();
