@@ -1,5 +1,5 @@
-//! This module contains the nc node message, trait and helper functions
-//! To use the node you have to implement the NCNode trait that has two functions:
+//! This module contains the nc node message, trait and helper methods.
+//! To use the node you have to implement the NCNode trait that has two methods:
 //! set_initial_data() and process_data_from_server()
 
 use std::net::{IpAddr, SocketAddr};
@@ -37,7 +37,7 @@ pub(crate) enum NCNodeMessage {
 /// This trait has to be implemented for the code that runs on all the nodes.
 pub trait NCNode {
     /// Once this node has sent a NCNodeMessage::Register message the server responds with a NCServerMessage::InitialData message.
-    /// Then this function is called with the data received from the server.
+    /// Then this method is called with the data received from the server.
     fn set_initial_data(&mut self, node_id: NodeID, initial_data: Option<Vec<u8>>) -> Result<(), NCError> {
         debug!("Got new node id: {}", node_id);
 
@@ -50,9 +50,9 @@ pub trait NCNode {
     }
 
     /// Whenever the node requests new data from the server, the server will respond with new data that needs to be processed by the node.
-    /// This function is then called with the data that was received from the server.
+    /// This method is then called with the data that was received from the server.
     /// Here you put your code that does the main number crunching on every node.
-    /// Note that you have to use the nc_decode_data() or nc_decode_data2() helper functions from the nc_utils module in order to
+    /// Note that you have to use the nc_decode_data() or nc_decode_data2() helper methods from the nc_utils module in order to
     /// deserialize the data.
     fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError>;
 }
@@ -74,7 +74,7 @@ impl NCNodeStarter {
     /// The main entry point for the code that runs on all nodes.
     /// You give it your own user defined data structure that implements the NCNode trait.
     /// Everything else is done automatically for you.
-    /// The NCNode trait function set_initial_data() is called here once in order to set the node id and some optional data that is
+    /// The NCNode trait method set_initial_data() is called here once in order to set the node id and some optional data that is
     /// send to all nodes at the beginning.
     pub fn start<T: NCNode>(&mut self, nc_node: T) -> Result<(), NCError> {
         debug!("NCNodeStarter::start()");
@@ -122,9 +122,9 @@ self.config.delay_request_data, self.config.retry_counter);
                     node_heartbeat.reset_counter();
                 }
             }
-        });
 
-        debug!("Heartbeat loop finished")
+            debug!("Heartbeat loop finished")
+        });
     }
 
     /// Here is main loop for this node. It keeps requesting and processing data until the server
@@ -243,7 +243,7 @@ impl<T: NCNode> NodeProcess<T> {
         NodeProcess{
             server_addr,
             nc_node,
-            // This will be set in the function get_initial_data()
+            // This will be set in the method get_initial_data()
             node_id: NodeID::unset(),
             retry_counter: RetryCounter::new(retry_counter),
             delay_duration: Duration::from_secs(delay_duration),
@@ -252,7 +252,7 @@ impl<T: NCNode> NodeProcess<T> {
 
     /// This is called once at the beginning of NCNodeStarter::start().
     /// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
-    /// On success it sets the new assigned node id for this node and calls the NCNode trait function set_initial_data().
+    /// On success it sets the new assigned node id for this node and calls the NCNode trait method set_initial_data().
     /// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
     fn get_initial_data(&mut self) -> Result<(), NCError> {
         debug!("NodeProcess::get_initial_data()");
@@ -279,13 +279,13 @@ impl<T: NCNode> NodeProcess<T> {
         nc_send_receive_data(&NCNodeMessage::Register, &self.server_addr)
     }
 
-    /// This function sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
+    /// This method sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
     /// Only one message is expected as a response from the server: NCServerMessage::JobStatus. This status can have two values
     /// 1. NCJobStatus::Unfinished: This means that the job is note done and there is still some more data to be processed.
-    ///      This node will then process the data calling the process_data_from_server() function and sends the data back to the
+    ///      This node will then process the data calling the process_data_from_server() method and sends the data back to the
     ///      server using the NCNodeMessage::HasData message.
     /// 2. NCJobStatus::Waiting: This means that not all nodes are done and the server is still waiting for all nodes to finish.
-    /// If the server sends a different message this function will return a NCError::ServerMsgMismatch error.
+    /// If the server sends a different message this method will return a NCError::ServerMsgMismatch error.
     fn get_and_process_data(&mut self) -> Result<(), NCError> {
         debug!("NodeProcess::get_and_process_data()");
 
@@ -332,7 +332,6 @@ impl<T: NCNode> NodeProcess<T> {
         debug!("NodeProcess::process_data_and_send_has_data_message()");
 
         let result = self.nc_node.process_data_from_server(data)?;
-
         nc_send_data(&NCNodeMessage::HasData(self.node_id, result), &self.server_addr)
     }
 
@@ -374,7 +373,7 @@ impl<T: NCNode> NodeProcess<T> {
 }
 
 /// Counter for nc_node if connection to server is not possible.
-/// The counter will be decreased every time there is an IO error and if it is zero the function dec_and_check
+/// The counter will be decreased every time there is an IO error and if it is zero the method dec_and_check
 /// returns true, otherwise false.
 /// When the connection to the server is working again, the counter is reset to its initial value.
 #[derive(Debug, Clone)]
