@@ -60,7 +60,6 @@ fn write_and_check_len<W: Write>(data: &[u8], tcp_stream: &mut W) -> Result<(), 
 pub(crate) fn nc_receive_data<D: DeserializeOwned, R: Read>(tcp_stream: &mut R) -> Result<D, NCError> {
     const BUFFER_SIZE: usize = 1024 * 128;
 
-    let mut data: Vec<u8> = Vec::new();
     let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     let mut data_len: [u8; 8] = [0; 8];
 
@@ -74,6 +73,7 @@ pub(crate) fn nc_receive_data<D: DeserializeOwned, R: Read>(tcp_stream: &mut R) 
     }
 
     let data_len = u64::from_le_bytes(data_len);
+    let mut data: Vec<u8> = Vec::with_capacity(data_len as usize);
 
     loop {
         match tcp_stream.read(&mut buffer) {
