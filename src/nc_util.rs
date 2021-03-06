@@ -34,8 +34,11 @@ pub(crate) fn nc_send_data2<S: Serialize, W: Write>(data: &S, tcp_stream: &mut W
     let data = nc_encode_data(data)?;
     let data_len = data.len() as u64;
 
-    write_and_check_len(&data_len.to_le_bytes(), tcp_stream)?;
-    write_and_check_len(&data, tcp_stream)
+    tcp_stream.write_all(&data_len.to_le_bytes())?;
+    tcp_stream.write_all(&data).map_err(|e| e.into())
+
+    // write_and_check_len(&data_len.to_le_bytes(), tcp_stream)?;
+    // write_and_check_len(&data, tcp_stream)
 }
 
 /// Write data and check if all data has been written.
