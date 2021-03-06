@@ -34,25 +34,25 @@ pub(crate) fn nc_send_data2<S: Serialize, W: Write>(data: &S, tcp_stream: &mut W
     let data = nc_encode_data(data)?;
     let data_len = data.len() as u64;
 
-    let n = tcp_stream.write(&data_len.to_le_bytes())?;
-
-    if n == 0 {
-        // Connection closed by the other side.
-        return Err(NCError::ConnectionClosed)
-    } else {
-        assert_eq!(n, 8);
-    }
-
-    let n = tcp_stream.write(&data)?;
-
-    if n == 0 {
-        // Connection closed by the other side.
-        return Err(NCError::ConnectionClosed)
-    } else {
-        assert_eq!(n as u64, data_len);
-    }
+    write_and_check_len(&data_len.to_le_bytes(), tcp_stream)?;
+    write_and_check_len(&data, tcp_stream)?;
 
     tcp_stream.flush().map_err(|e| e.into())
+}
+
+/// Write data and check if all data has been written.
+/// If no data could be written, return NCError::ConnectionClosed.
+fn write_and_check_len<W: Write>(data: &[u8], tcp_stream: &mut W) -> Result<(), NCError> {
+    let len = data.len();
+    let n = tcp_stream.write(data)?;
+
+    if n == 0 {
+        // Connection closed by the other side.
+        Err(NCError::ConnectionClosed)
+    } else {
+        assert_eq!(n, len);
+        Ok(())
+    }
 }
 
 /// Read data from the given Reader (usually a tcp stream) and deserialize it.
