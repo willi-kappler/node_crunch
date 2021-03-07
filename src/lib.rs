@@ -9,7 +9,7 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
-// - Better error handling ?
+// - Better error handling ? Maybe use "thiserror": https://github.com/dtolnay/thiserror
 
 mod nc_server;
 mod nc_node;
