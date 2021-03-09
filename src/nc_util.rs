@@ -35,7 +35,8 @@ pub(crate) fn nc_send_data2<S: Serialize, W: Write>(data: &S, tcp_stream: &mut W
     let data_len = data.len() as u64; // u64 is platform independend, usize is platform dependend
 
     tcp_stream.write_all(&data_len.to_le_bytes())?;
-    tcp_stream.write_all(&data).map_err(|e| e.into())
+    tcp_stream.write_all(&data)?;
+    tcp_stream.flush().map_err(|e| e.into())
 }
 
 /// Read data from the given Reader (usually a tcp stream) and deserialize it.
