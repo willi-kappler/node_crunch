@@ -14,7 +14,7 @@ Allows to distribute computations across several nodes.
   - [How to start the application](#how-to-start-the-application)
     - [Manually](#manually)
     - [Using SLURM / sbatch](#using-slurm--sbatch)
-    - [Using Torq / Moab / qsub](#using-torq--moab--qsub)
+    - [Using PBS / Torque / qsub](#using-pbs--torque--qsub)
   - [Full working examples](#full-working-examples)
   - [How does it compare to *x* ?](#how-does-it-compare-to-x-)
     - [MPI](#mpi)
@@ -25,20 +25,23 @@ Allows to distribute computations across several nodes.
 
 ## Features
 
-**Note 1:** *It is still in development and the API may change.*
-**Note 2:** *The communication between the server and the nodes are not encrypted and there is no authentication, so use this in a trusted environment only!*
-
 - 100% safe Rust.
 - Easy to use API.
 - If one of the nodes crashes the server and all other nodes can still continue with their work. (Internally heartbeat messages are used.)
 - While running the user application more nodes can be added to speed up computation even more.
 - The nodes can be a mixture of different OS and hardware achitecture. If it compiles it runs.
 
+**Note 1:** *It is still in development and the API may change.*
+
+**Note 2:** *The communication between the server and the nodes are not encrypted and there is no authentication, so use this in a trusted environment only!*
+
 ## Introduction
 
 Node Crunch is a crate that allows users to write distributed code easily. The code is organized in a two main parts: one for the server and one for the node.
 
 This is reflected in the two traits that must be implemented for Node Crunch to work:
+
+![Node Crunch Logo](NodeCrunch.png)
 
 1. The **NCSever** trait. This contains the functionality for the server. Here the data is split up for the nodes to do the computation and later the data is collected from all the nodes. The trait has five functions that have to be implemented accordingly:
 
@@ -158,14 +161,18 @@ match node_starter.start(node) {
 
 ### Manually
 
-Usually there is one binary for both the server and the node code. You just specify which mode is used for example via the command line. Since there is only one server and lots of nodes, the node mode should be the default:
+Usually there is one binary for both the server and the node code. You just specify which mode is used for example via the command line.
+For example we are using the switch "-s" to specify the server mode.
+Since there is only one server and lots of nodes, the node mode should be the default:
 
 ```bash
-./myapp -s & # runs in server mode
+./myapp -s & # option "-s" means run in server mode
 
 ./myapp & # start one task in node mode
 
 ./myapp & # start another task in node mode
+
+./myapp --ip ip_of_server & # from a different computer
 
 ```
 
@@ -187,18 +194,69 @@ fn main() {
 ### Using SLURM / sbatch
 
 If you're using a HPC (high performance cluster) you will run new jobs through a job scheduler.
-The mostly used one (at least in the top500 list) is SLURM.
+The mostly used one (at least in the [TOP500](https://www.top500.org/) list) is SLURM.
 
-### Using Torq / Moab / qsub
+First start the server on one computer where the ip address is known:
 
-Another commonly used job scheduler is Torq.
+```bash
+./myapp -s & # again here "-s" means run in server mode
+```
+
+Then make sure that the binary is available on all the compute node in the same folder / path.
+Now you can start multiple jobs using the job scheduler, in this case start 8 jobs:
+
+```bash
+for i in {1..8}; do sbatch run_single.sbatch; done
+```
+
+The batch file "run_single.sbatch" may look like this, we're using the command line option "--ip" to specify the ip address of the server:
+
+```bash
+#!/bin/bash -l
+## Example run script for Node Crunch with SLURM
+
+## General configuration options
+#SBATCH -J Node_Crunch
+#SBATCH -o node_crunch.%j.%N.out
+#SBATCH -e node_crunch.%j.%N_Err.out
+#SBATCH --mail-user=my_email@somewhere.com
+#SBATCH --mail-type=ALL
+
+## Machine and CPU configuration
+## Number of tasks per job:
+#SBATCH -n 1
+## Number of nodes:
+#SBATCH -N 1
+
+# Ensure that all the binaries are availavle on all the cluster nodes at the same place.
+# Usually this is done in the cluster setup via NFS or some other distributed
+# filesystem already.
+
+# change this to the actual ip address of the system where the server is running.
+myapp --ip ip_of_server
+```
+
+### Using PBS / Torque / qsub
+
+Other commonly used job scheduler are PBS or Torque. Again ensure that the binary is available on all compute nodes.
+Then you can start multiple jobs (8 in this case):
+
+```bash
+for i in {1..8}; do qsub run_single.qsub; done
+```
+
+Here the file "run_single.qsub" may look like this:
+
+```bash
+
+```
 
 ## Full working examples
 
 Using the two traits looks complicated at first but there are a couple of examples that show how to use it in "real world" applications:
 
-- Distributed Mandelbrot
-- Distributed Path Tracing
+- Distributed [Mandelbrot](examples/mandel1/), and [using rayon](examples/mandel2/)
+- Distributed [Path Tracing](examples/path_tracing/)
 - ...
 
 ## How does it compare to *x* ?
