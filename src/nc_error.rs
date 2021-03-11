@@ -13,11 +13,11 @@ pub enum NCError {
     IOError(io::Error),
     /// Data could not be serialized for sending over the network.
     Serialize(bincode::Error),
-    /// Data comming from the network could not be deserialized.
+    /// Data coming from the network could not be deserialized.
     Deserialize(bincode::Error),
     /// The bincode crate has its own error.
     Bincode(Box<bincode::ErrorKind>),
-    /// The node expected a specifig message from the server but got s.th. totally different.
+    /// The node expected a specific message from the server but got s.th. totally different.
     ServerMsgMismatch,
     /// The server expected a specific message from the node but got s.th. totally different.
     NodeMsgMismatch,
