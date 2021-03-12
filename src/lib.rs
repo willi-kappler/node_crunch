@@ -9,6 +9,12 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
+// - Refactor nc_server.rs:
+//   - Move start_heartbeat_thread() to ServerHeartbeat
+//   - Move start_main_loop() to ServerProcess
+//   - Move start_node_thread to ServerProcess
+//   - ServerProcess: use reference to ThreadPool
+//   - ServerHeartbeat: use reference to ThreadPool
 
 mod nc_server;
 mod nc_node;

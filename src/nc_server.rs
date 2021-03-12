@@ -97,8 +97,8 @@ impl NCServerStarter {
         let time_start = Instant::now();
         // let job_done = Arc::new(AtomicBool::new(false));
 
-        let server_process = ServerProcess::new(self.config.clone(), nc_server);
-        let server_heartbeat = ServerHeartbeat::new(self.config.clone());
+        let server_process = ServerProcess::new(&self.config, nc_server);
+        let server_heartbeat = ServerHeartbeat::new(&self.config);
 
         let thread_pool = ThreadPool::new(self.config.pool_size as usize);
 
@@ -143,7 +143,7 @@ impl NCServerStarter {
         debug!("NCServerStarter::start_main_loop()");
 
         let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable ?
-        let socket_addr = SocketAddr::new(ip_addr, server_process.config.port);
+        let socket_addr = SocketAddr::new(ip_addr, server_process.port);
         let listener = TcpListener::bind(socket_addr).unwrap();
 
         let job_done = server_process.clone_job_done();
@@ -196,7 +196,7 @@ struct ServerHeartbeat {
 
 impl ServerHeartbeat {
     /// Creates a new ServerHeartbeat with the given configuration.
-    fn new(config: NCConfiguration) -> Self {
+    fn new(config: &NCConfiguration) -> Self {
         debug!("ServerHeartbeat::new()");
 
         let ip_addr: IpAddr = "127.0.0.1".parse().unwrap();
@@ -226,10 +226,12 @@ impl ServerHeartbeat {
     }
 }
 
-/// In here the server handles all the messages and generates apropirate responses.
+/// In here the server handles all the messages and generates appropriate responses.
 struct ServerProcess<T> {
-    /// The server and node configuration.
-    config: NCConfiguration,
+    /// The port the server will listen to.
+    port: u16,
+    /// Every n seconds a heartbeat message is sent from the node to the server.
+    heartbeat: u64,
     /// The user defined data structure that implements the NCServer trait.
     nc_server: Mutex<T>,
     /// Internal list of all the registered nodes.
@@ -240,11 +242,12 @@ struct ServerProcess<T> {
 
 impl<T: NCServer> ServerProcess<T> {
     /// Creates a new ServerProcess with the given user defined nc_server that implements the NCServer trait
-    fn new(config: NCConfiguration, nc_server: T) -> Self {
+    fn new(config: &NCConfiguration, nc_server: T) -> Self {
         debug!("ServerProcess::new()");
 
         ServerProcess{
-            config,
+            port: config.port,
+            heartbeat: config.heartbeat,
             nc_server: Mutex::new(nc_server),
             node_list: Mutex::new(NCNodeList::new()),
             job_done: Arc::new(AtomicBool::new(false)),
@@ -315,7 +318,7 @@ impl<T: NCServer> ServerProcess<T> {
                 debug!("Message CheckHeartbeat received!");
                 // Check the heartbeat for all the nodes and call the trait method heartbeat_timeout()
                 // with those nodes to react accordingly.
-                let nodes = self.node_list.lock()?.check_heartbeat(self.config.heartbeat).collect::<Vec<NodeID>>();
+                let nodes = self.node_list.lock()?.check_heartbeat(self.heartbeat).collect::<Vec<NodeID>>();
                 self.nc_server.lock()?.heartbeat_timeout(nodes);
             }
         }
