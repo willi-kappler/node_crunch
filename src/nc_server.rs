@@ -16,7 +16,7 @@ use std::time::{Instant, Duration};
 
 use log::{error, info, debug};
 use serde::{Serialize, Deserialize};
-use crossbeam::{self, thread::Scope};
+use threadpool::ThreadPool;
 
 use crate::nc_error::NCError;
 use crate::nc_node::NCNodeMessage;
@@ -91,7 +91,7 @@ impl NCServerStarter {
     }
 
     /// This is the main method that you call when you start the server. It expects your custom data structure that implements the NCServer trait.
-    pub fn start<T: NCServer + Send>(&mut self, nc_server: T) -> Result<(), NCError> {
+    pub fn start<T: NCServer + Send + 'static>(&mut self, nc_server: T) -> Result<(), NCError> {
         debug!("NCServerStarter::new()");
 
         let time_start = Instant::now();
@@ -100,14 +100,16 @@ impl NCServerStarter {
         let server_process = ServerProcess::new(self.config.clone(), nc_server);
         let server_heartbeat = ServerHeartbeat::new(self.config.clone());
 
-        crossbeam::scope(|scope|{
-            self.start_heartbeat_thread(scope, server_heartbeat);
-            self.start_main_loop(scope, server_process);
-        }).unwrap();
+        let thread_pool = ThreadPool::new(self.config.pool_size as usize);
+
+        self.start_heartbeat_thread(&thread_pool, server_heartbeat);
+        self.start_main_loop(&thread_pool, server_process);
 
         let time_taken = (Instant::now() - time_start).as_secs_f64();
 
         info!("Time taken: {} s, {} min, {} h", time_taken, time_taken / 60.0, time_taken / (60.0 * 60.0));
+
+        thread_pool.join();
 
         Ok(())
     }
@@ -118,10 +120,10 @@ impl NCServerStarter {
     /// If there is an IO error the loop exits because the server also has finished its main loop and
     /// doesn't accept any tcp connections anymore.
     /// The job is done and no more heartbeats will arrive.
-    fn start_heartbeat_thread(&self, scope: &Scope, server_heartbeat: ServerHeartbeat) {
+    fn start_heartbeat_thread(&self, thread_pool: &ThreadPool, server_heartbeat: ServerHeartbeat) {
         debug!("NCServerStarter::start_heartbeat_thread()");
 
-        scope.spawn(move |_| {
+        thread_pool.execute(move || {
             loop {
                 server_heartbeat.sleep();
 
@@ -137,7 +139,7 @@ impl NCServerStarter {
     /// In here the main loop and the tcp server are started.
     /// For every node connection the method start_node_thread() is called, which handles the node request in a separate thread.
     /// If the job is done one the main loop will exited
-    fn start_main_loop<'a, T: 'a + NCServer + Send>(&self, scope: &Scope<'a>, server_process: ServerProcess<T>) {
+    fn start_main_loop<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, server_process: ServerProcess<T>) {
         debug!("NCServerStarter::start_main_loop()");
 
         let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable ?
@@ -152,7 +154,7 @@ impl NCServerStarter {
             match listener.accept() {
                 Ok((stream, addr)) => {
                     debug!("Connection from node: {}", addr);
-                    self.start_node_thread(scope, stream, server_process.clone());
+                    self.start_node_thread(thread_pool, stream, server_process.clone());
                 }
                 Err(e) => {
                     error!("IO error while accepting node connections: {}", e);
@@ -173,10 +175,10 @@ impl NCServerStarter {
         server_process.nc_server.lock().unwrap().finish_job();
     }
     /// This starts a new thread for each node that sends a message to the server and calls the handle_node() method in that thread.
-    fn start_node_thread<'a, T: 'a + NCServer + Send>(&self, scope: &Scope<'a>, stream: TcpStream, server_process: Arc<ServerProcess<T>>) {
+    fn start_node_thread<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, stream: TcpStream, server_process: Arc<ServerProcess<T>>) {
         debug!("NCServerStarter::start_node_thread()");
 
-        scope.spawn(move |_| {
+        thread_pool.execute(move || {
             if let Err(e) = server_process.handle_node(stream) {
                 error!("Error in handle_node(): {}", e);
             }

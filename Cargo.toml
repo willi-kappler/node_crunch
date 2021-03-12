@@ -12,9 +12,9 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
 rand = "0.7"
-crossbeam = "0.8"
+#crossbeam = "0.8"
 thiserror = "1.0"
-#threadpool = "1.0"
+threadpool = "1.0"
 
 
 [profile.release]

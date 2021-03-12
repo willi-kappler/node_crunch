@@ -15,6 +15,8 @@ pub struct NCConfiguration{
     pub delay_request_data: u64,
     /// Number of times a node should try to contact the server before givin up.
     pub retry_counter: u64,
+    /// The number of threads in the thread pool
+    pub pool_size: u64,
 }
 
 impl Default for NCConfiguration {
@@ -25,6 +27,7 @@ impl Default for NCConfiguration {
             heartbeat: 60,
             delay_request_data: 60,
             retry_counter: 5,
+            pool_size: 8
         }
     }
 }

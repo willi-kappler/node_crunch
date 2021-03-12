@@ -4,11 +4,10 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::{thread, time::Duration};
+use std::thread::{spawn, JoinHandle};
 
 use log::{error, info, debug};
-
 use serde::{Serialize, Deserialize};
-use crossbeam::{self, thread::Scope};
 
 use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
@@ -89,10 +88,9 @@ self.config.delay_request_data, self.config.retry_counter);
         let node_heartbeat = NodeHeartbeat::new(server_addr, node_process.node_id,
             self.config.retry_counter, self.config.heartbeat);
 
-        crossbeam::scope(|scope|{
-            self.start_heartbeat_thread(scope, node_heartbeat);
-            self.start_main_loop(node_process);
-        }).unwrap();
+        let thread_handle = self.start_heartbeat_thread(node_heartbeat);
+        self.start_main_loop(node_process);
+        thread_handle.join().unwrap();
 
         info!("Job done, exit now");
         Ok(())
@@ -102,10 +100,10 @@ self.config.delay_request_data, self.config.retry_counter);
     /// It does this every n seconds which can be configured in the NCConfiguration data structure.
     /// If the server doesn't receive the heartbeat within the valid time span, the server marks the node internally as offline
     /// and gives another node the same data chunk to process.
-    fn start_heartbeat_thread(&self, scope: &Scope, mut node_heartbeat: NodeHeartbeat) {
+    fn start_heartbeat_thread(&self, mut node_heartbeat: NodeHeartbeat) -> JoinHandle<()> {
         debug!("NCNodeStarter::start_heartbeat_thread()");
 
-        scope.spawn(move |_| {
+        spawn(move || {
             loop {
                 node_heartbeat.sleep();
 
@@ -124,7 +122,7 @@ self.config.delay_request_data, self.config.retry_counter);
             }
 
             debug!("Heartbeat loop finished")
-        });
+        })
     }
 
     /// Here is main loop for this node. It keeps requesting and processing data until the server

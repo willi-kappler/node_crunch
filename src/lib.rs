@@ -9,7 +9,6 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
-// - Use a thread pool to avoid possible DDOS attacks
 
 mod nc_server;
 mod nc_node;
