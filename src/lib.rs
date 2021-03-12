@@ -1,16 +1,15 @@
-//! NodeCrunsh is a crate that allows to distribute computations among multiple nodes.
+//! NodeCrunch is a crate that allows to distribute computations among multiple nodes.
 //! The user of this crate has to implement one trait for the server and one trait for the nodes.
 //! Usually the code for the server and the node is inside the same binary and the choice if to
 //! run in server mode or node mode is done via configuration or command line argument.
-//! See some of the programms in the example folders.
+//! See some of the programs in the example folders.
 
 // TODO:
 // - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
-// - Better error handling ? Maybe use "thiserror": https://github.com/dtolnay/thiserror
-// - Use a thead pool to avoid possible DDOS attacs
+// - Use a thread pool to avoid possible DDOS attacks
 
 mod nc_server;
 mod nc_node;
