@@ -57,7 +57,7 @@ pub trait NCNode {
     fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError>;
 }
 
-/// Main data structure for managing and starting the computaion on the nodes.
+/// Main data structure for managing and starting the computation on the nodes.
 pub struct NCNodeStarter {
     /// Configuration for the server and the node.
     config: NCConfiguration,
@@ -118,7 +118,7 @@ self.config.delay_request_data, self.config.retry_counter);
                     }
 
                 } else {
-                    // Reset the counter if message was sent sucessfully
+                    // Reset the counter if message was sent successfully
                     node_heartbeat.reset_counter();
                 }
             }
@@ -150,7 +150,7 @@ self.config.delay_request_data, self.config.retry_counter);
                 debug!("Will wait before retry (delay_request_data: {} sec)", node_process.get_delay());
                 node_process.sleep();
             } else {
-                // Reset the counter if message was sent sucessfully
+                // Reset the counter if message was sent successfully
                 node_process.reset_counter()
             }
         }
@@ -378,7 +378,7 @@ impl<T: NCNode> NodeProcess<T> {
 /// When the connection to the server is working again, the counter is reset to its initial value.
 #[derive(Debug, Clone)]
 struct RetryCounter {
-    /// The initial value for the counter. It can be resetted to this value when a message has been send / received sucessfully.
+    /// The initial value for the counter. It can be resetted to this value when a message has been send / received successfully.
     init: u64,
     /// The current value for the counter. It will be decremented in an IO error case.
     counter: u64,
@@ -406,7 +406,7 @@ impl RetryCounter {
         }
     }
 
-    /// Resets the counter to it's inital value.
+    /// Resets the counter to it's initial value.
     fn reset(&mut self) {
         debug!("RetryCounter::reset()");
 
