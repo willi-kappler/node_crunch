@@ -100,7 +100,7 @@ impl NCServerStarter {
         let server_process = ServerProcess::new(&self.config, nc_server);
         let server_heartbeat = ServerHeartbeat::new(&self.config);
 
-        let thread_pool = ThreadPool::new(self.config.pool_size as usize);
+        let thread_pool = ThreadPool::new((self.config.pool_size + 1) as usize);
 
         self.start_heartbeat_thread(&thread_pool, server_heartbeat);
         self.start_main_loop(&thread_pool, server_process);
