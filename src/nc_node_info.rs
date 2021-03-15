@@ -13,6 +13,7 @@ use serde::{Serialize, Deserialize};
 pub struct NodeID(u64);
 
 /// This data strutcure contains the node id and the time stamps for the heartbeat.
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct NCNodeInfo {
     pub(crate) node_id: NodeID,
     pub(crate) instant: Instant,
@@ -99,6 +100,103 @@ impl NCNodeList {
                 node.update_heartbeat();
                 break
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_heartbeat_invalid() {
+        let node_info = NCNodeInfo::new(NodeID::unset());
+
+        thread::sleep(Duration::from_secs(3));
+
+        assert!(!node_info.heartbeat_invalid(5));
+
+        thread::sleep(Duration::from_secs(3));
+
+        assert!(node_info.heartbeat_invalid(5));
+    }
+
+    #[test]
+    fn test_update_heartbeat() {
+        let mut node_info = NCNodeInfo::new(NodeID::unset());
+
+        thread::sleep(Duration::from_secs(5));
+
+        assert!(node_info.heartbeat_invalid(3));
+
+        node_info.update_heartbeat();
+
+        assert!(!node_info.heartbeat_invalid(3));
+    }
+
+    #[test]
+    fn test_register_new_node() {
+        let mut node_list = NCNodeList::new();
+
+        let node = node_list.register_new_node();
+
+        assert_eq!(node_list.nodes.len(), 1);
+
+        assert_eq!(node_list.nodes[0].node_id, node);
+
+        let node = node_list.register_new_node();
+
+        assert_eq!(node_list.nodes.len(), 2);
+
+        assert_ne!(node_list.nodes[0].node_id, node);
+        assert_eq!(node_list.nodes[1].node_id, node);
+    }
+
+    #[test]
+    fn test_node_list_check_heartbeat() {
+        let mut node_list = NCNodeList::new();
+
+        let _ = node_list.register_new_node();
+        let _ = node_list.register_new_node();
+        let _ = node_list.register_new_node();
+        let _ = node_list.register_new_node();
+
+        let result = node_list.check_heartbeat(5);
+        let result = result.collect::<Vec<NodeID>>();
+
+        assert_eq!(result.len(), 0);
+
+        thread::sleep(Duration::from_secs(5));
+
+        let result = node_list.check_heartbeat(3);
+        let result = result.collect::<Vec<NodeID>>();
+
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn test_node_list_update_heartbeat() {
+        let mut node_list = NCNodeList::new();
+
+        let _ = node_list.register_new_node();
+        let _ = node_list.register_new_node();
+        let node_id = node_list.register_new_node();
+        let _ = node_list.register_new_node();
+
+        thread::sleep(Duration::from_secs(5));
+
+        node_list.update_heartbeat(node_id);
+
+        let result = node_list.check_heartbeat(3);
+        let result = result.collect::<Vec<NodeID>>();
+
+        assert_eq!(result.len(), 3);
+
+        for other_id in result {
+            assert_ne!(other_id, node_id);
         }
     }
 }
