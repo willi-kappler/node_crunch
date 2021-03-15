@@ -61,3 +61,70 @@ pub(crate) fn nc_send_receive_data<S: Serialize, D: DeserializeOwned, A: ToSocke
     nc_send_data2(data, &mut tcp_stream)?;
     nc_receive_data(&mut tcp_stream)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_decode() {
+        let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
+
+        let data2 = nc_encode_data(&data1).unwrap();
+
+        let data3: (String, u32, bool) = nc_decode_data(&data2).unwrap();
+
+        assert_eq!(data1, data3);
+    }
+
+    #[test]
+    fn test_send_data2() {
+        use std::convert::TryInto;
+
+        let data1: (String, u32, bool) = ("Test send_data2!".to_string(), 121212, false);
+
+        let mut buffer: Vec<u8> = Vec::new();
+
+        nc_send_data2(&data1, &mut buffer).unwrap();
+
+        assert_eq!(buffer.len(), 37);
+
+        let len_buffer: [u8; 8] = buffer[0..8].try_into().unwrap();
+        let data_len = u64::from_le_bytes(len_buffer);
+
+        assert_eq!(data_len, 29);
+
+        let data2: (String, u32, bool) = nc_decode_data(&buffer[8..]).unwrap();
+
+        assert_eq!(data1, data2);
+    }
+
+    #[test]
+    fn test_receive_data() {
+        let data1: (String, u32, bool) = ("Test receive_data!".to_string(), 998877, true);
+        let mut data2 = nc_encode_data(&data1).unwrap();
+
+        let data_len = data2.len() as u64;
+        let data_len = data_len.to_le_bytes();
+        let mut buffer = data_len.to_vec();
+
+        buffer.append(&mut data2);
+
+        let data3: (String, u32, bool) = nc_receive_data(&mut buffer.as_slice()).unwrap();
+
+        assert_eq!(data1, data3);
+    }
+
+    #[test]
+    fn test_send_and_receive() {
+        let data1: (String, u32, bool) = ("Test send and then receive data!".to_string(), 550055, true);
+
+        let mut buffer: Vec<u8> = Vec::new();
+
+        nc_send_data2(&data1, &mut buffer).unwrap();
+
+        let data2: (String, u32, bool) = nc_receive_data(&mut buffer.as_slice()).unwrap();
+
+        assert_eq!(data1, data2);
+    }
+}
