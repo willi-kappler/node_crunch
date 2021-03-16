@@ -411,3 +411,92 @@ impl RetryCounter {
         self.counter = self.init
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::net::{IpAddr, Ipv4Addr};
+
+    struct TestNode;
+
+    impl NCNode for TestNode {
+        fn process_data_from_server(&mut self, _data: &[u8]) -> Result<Vec<u8>, NCError> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn test_nhb_dec_and_check_counter1() {
+        let mut nhb = NodeHeartbeat::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+        NodeID::unset(), 5, 60);
+
+        assert_eq!(nhb.get_counter(), 5);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 4);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 3);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 2);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 1);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 0);
+        assert!(nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 0);
+    }
+
+    #[test]
+    fn test_nhb_reset_counter() {
+        let mut nhb = NodeHeartbeat::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+        NodeID::unset(), 5, 60);
+
+        assert_eq!(nhb.get_counter(), 5);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 4);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 3);
+        nhb.reset_counter();
+        assert_eq!(nhb.get_counter(), 5);
+        assert!(!nhb.dec_and_check_counter());
+        assert_eq!(nhb.get_counter(), 4);
+    }
+
+    #[test]
+    fn test_np_dec_and_check_counter() {
+        let nc_node = TestNode{};
+        let mut np = NodeProcess::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            nc_node, 60, 5);
+
+        assert_eq!(np.get_counter(), 5);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 4);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 3);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 2);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 1);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 0);
+        assert!(np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 0);
+    }
+
+    #[test]
+    fn test_np_reset_counter() {
+        let nc_node = TestNode{};
+        let mut np = NodeProcess::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            nc_node, 60, 5);
+
+        assert_eq!(np.get_counter(), 5);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 4);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 3);
+        np.reset_counter();
+        assert_eq!(np.get_counter(), 5);
+        assert!(!np.dec_and_check_counter());
+        assert_eq!(np.get_counter(), 4);
+    }
+}
