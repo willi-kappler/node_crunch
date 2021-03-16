@@ -260,3 +260,153 @@ impl<T> ChunkList<T> {
         self.chunks.push(Chunk{ data, node_id: NodeID::random(), status: ChunkStatus::Empty});
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_a2d_index() {
+        let a2d = Array2D::new(10, 10, 0);
+
+        assert_eq!(a2d.index(0, 0), 0);
+        assert_eq!(a2d.index(1, 0), 1);
+        assert_eq!(a2d.index(0, 1), 10);
+        assert_eq!(a2d.index(1, 1), 11);
+        assert_eq!(a2d.index(9, 9), 99);
+    }
+
+    #[test]
+    fn test_a2d_set_and_get() {
+        let mut a2d = Array2D::new(10, 10, 0);
+
+        assert_eq!(a2d.get(0, 0), 0);
+        a2d.set(0, 0, 55);
+        assert_eq!(a2d.get(0, 0), 55);
+
+        assert_eq!(a2d.get(4, 8), 0);
+        a2d.set(4, 8, 123);
+        assert_eq!(a2d.get(4, 8), 123);
+
+        assert_eq!(a2d.get(9, 9), 0);
+        a2d.set(9, 9, 999);
+        assert_eq!(a2d.get(9, 9), 999);
+    }
+
+    #[test]
+    fn test_a2d_set_region1() {
+        let mut a2d = Array2D::new(10, 10, 0);
+
+        let region = Array2D::new(1, 1, 789);
+
+        assert_eq!(a2d.get(6, 5), 0);
+        a2d.set_region(6, 5, &region);
+        assert_eq!(a2d.get(6, 5), 789);
+    }
+
+    #[test]
+    fn test_a2d_set_region2() {
+        let mut a2d = Array2D::new(10, 10, 0);
+
+        let region = Array2D::new(2, 2, 2345);
+
+        assert_eq!(a2d.get(2, 7), 0);
+        assert_eq!(a2d.get(3, 7), 0);
+        assert_eq!(a2d.get(2, 8), 0);
+        assert_eq!(a2d.get(3, 8), 0);
+        a2d.set_region(2, 7, &region);
+        assert_eq!(a2d.get(2, 7), 2345);
+        assert_eq!(a2d.get(3, 7), 2345);
+        assert_eq!(a2d.get(2, 8), 2345);
+        assert_eq!(a2d.get(3, 8), 2345);
+    }
+
+    #[test]
+    fn test_a2d_set_region3() {
+        let mut a2d = Array2D::new(2, 2, 0);
+
+        let region = Array2D::new(2, 2, 8765);
+
+        assert_eq!(a2d.get(0, 0), 0);
+        assert_eq!(a2d.get(1, 0), 0);
+        assert_eq!(a2d.get(0, 1), 0);
+        assert_eq!(a2d.get(1, 1), 0);
+        a2d.set_region(0, 0, &region);
+        assert_eq!(a2d.get(0, 0), 8765);
+        assert_eq!(a2d.get(1, 0), 8765);
+        assert_eq!(a2d.get(0, 1), 8765);
+        assert_eq!(a2d.get(1, 1), 8765);
+    }
+
+    #[test]
+    fn test_a2d_chunk_new1() {
+        let a2d_chunk = Array2DChunk::new(100, 100, 20, 20, 0);
+
+        assert_eq!(a2d_chunk.chunk_width, 20);
+        assert_eq!(a2d_chunk.chunk_height, 20);
+        assert_eq!(a2d_chunk.rest_width, 0);
+        assert_eq!(a2d_chunk.rest_height, 0);
+        assert_eq!(a2d_chunk.chunks_x, 5);
+        assert_eq!(a2d_chunk.chunks_y, 5);
+    }
+
+    #[test]
+    fn test_a2d_chunk_new2() {
+        let a2d_chunk = Array2DChunk::new(100, 100, 21, 21, 0);
+
+        assert_eq!(a2d_chunk.chunk_width, 21);
+        assert_eq!(a2d_chunk.chunk_height, 21);
+        assert_eq!(a2d_chunk.rest_width, 16);
+        assert_eq!(a2d_chunk.rest_height, 16);
+        assert_eq!(a2d_chunk.chunks_x, 5);
+        assert_eq!(a2d_chunk.chunks_y, 5);
+    }
+
+    #[test]
+    fn test_a2d_chunk_num_of_chunks1() {
+        let a2d_chunk = Array2DChunk::new(100, 100, 20, 20, 0);
+
+        assert_eq!(a2d_chunk.num_of_chunks(), 25);
+    }
+
+    #[test]
+    fn test_a2d_chunk_num_of_chunks2() {
+        let a2d_chunk = Array2DChunk::new(100, 100, 21, 21, 0);
+
+        assert_eq!(a2d_chunk.num_of_chunks(), 25);
+    }
+
+    #[test]
+    fn test_a2d_chunk_get_chunk_property1() {
+        let a2d_chunk = Array2DChunk::new(120, 120, 40, 40, 0);
+
+        assert_eq!(a2d_chunk.num_of_chunks(), 9);
+
+        assert_eq!(a2d_chunk.get_chunk_property(0), (0, 0, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(1), (40, 0, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(2), (80, 0, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(3), (0, 40, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(4), (40, 40, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(5), (80, 40, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(6), (0, 80, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(7), (40, 80, 40, 40));
+        assert_eq!(a2d_chunk.get_chunk_property(8), (80, 80, 40, 40));
+    }
+
+    #[test]
+    fn test_a2d_chunk_get_chunk_property2() {
+        let a2d_chunk = Array2DChunk::new(120, 120, 41, 41, 0);
+
+        assert_eq!(a2d_chunk.num_of_chunks(), 9);
+
+        assert_eq!(a2d_chunk.get_chunk_property(0), (0, 0, 41, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(1), (41, 0, 41, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(2), (82, 0, 38, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(3), (0, 41, 41, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(4), (41, 41, 41, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(5), (82, 41, 38, 41));
+        assert_eq!(a2d_chunk.get_chunk_property(6), (0, 82, 41, 38));
+        assert_eq!(a2d_chunk.get_chunk_property(7), (41, 82, 41, 38));
+        assert_eq!(a2d_chunk.get_chunk_property(8), (82, 82, 38, 38));
+    }
+}
