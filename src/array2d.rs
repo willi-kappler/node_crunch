@@ -23,6 +23,9 @@ pub struct Array2D<T> {
 impl<T: Clone + Copy> Array2D<T> {
     /// Creates a new Array2D with the given dimension and the initial fill value.
     pub fn new(width: u64, height: u64, initial: T) -> Array2D<T> {
+        assert!(width > 0);
+        assert!(height > 0);
+
         let data = vec![initial; (width * height) as usize];
 
         Array2D {
@@ -90,6 +93,13 @@ pub struct Array2DChunk<T> {
 impl<T: Clone + Copy> Array2DChunk<T> {
     /// Creates a new Array2DChunk with the given width, height, chunk_width and chunk_height.
     pub fn new(width: u64, height: u64, chunk_width: u64, chunk_height: u64, initial: T) -> Array2DChunk<T> {
+        assert!(width > 0);
+        assert!(height > 0);
+        assert!(chunk_width > 0);
+        assert!(chunk_height > 0);
+        assert!(chunk_width < width);
+        assert!(chunk_height < height);
+
         let a = width / chunk_width;
         let rest_width = width - (a * chunk_width);
 
@@ -266,6 +276,18 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic]
+    fn test_a2d_new1() {
+        let _a2d = Array2D::new(0, 1, 99);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_new2() {
+        let _a2d = Array2D::new(1, 0, 99);
+    }
+
+    #[test]
     fn test_a2d_index() {
         let a2d = Array2D::new(10, 10, 0);
 
@@ -363,6 +385,42 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new3() {
+        let _a2d_chunk = Array2DChunk::new(0, 100, 10, 10, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new4() {
+        let _a2d_chunk = Array2DChunk::new(100, 0, 10, 10, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new5() {
+        let _a2d_chunk = Array2DChunk::new(100, 100, 0, 10, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new6() {
+        let _a2d_chunk = Array2DChunk::new(100, 100, 10, 0, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new7() {
+        let _a2d_chunk = Array2DChunk::new(100, 100, 110, 10, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_a2d_chunk_new8() {
+        let _a2d_chunk = Array2DChunk::new(100, 100, 10, 110, 0);
+    }
+
+    #[test]
     fn test_a2d_chunk_num_of_chunks1() {
         let a2d_chunk = Array2DChunk::new(100, 100, 20, 20, 0);
 
@@ -408,5 +466,37 @@ mod tests {
         assert_eq!(a2d_chunk.get_chunk_property(6), (0, 82, 41, 38));
         assert_eq!(a2d_chunk.get_chunk_property(7), (41, 82, 41, 38));
         assert_eq!(a2d_chunk.get_chunk_property(8), (82, 82, 38, 38));
+    }
+
+    #[test]
+    fn test_a2d_chunk_set_chunk1() {
+        let mut a2d_chunk = Array2DChunk::new(6, 6, 2, 2, 0);
+        let a2d = Array2D::new(2, 2, 112233);
+
+        assert_eq!(a2d_chunk.get(2, 0), 0);
+        assert_eq!(a2d_chunk.get(2, 1), 0);
+        assert_eq!(a2d_chunk.get(3, 0), 0);
+        assert_eq!(a2d_chunk.get(3, 1), 0);
+        a2d_chunk.set_chunk(1, &a2d).unwrap();
+        assert_eq!(a2d_chunk.get(2, 0), 112233);
+        assert_eq!(a2d_chunk.get(2, 1), 112233);
+        assert_eq!(a2d_chunk.get(3, 0), 112233);
+        assert_eq!(a2d_chunk.get(3, 1), 112233);
+    }
+
+    #[test]
+    fn test_a2d_chunk_set_chunk2() {
+        let mut a2d_chunk = Array2DChunk::new(6, 6, 2, 2, 0);
+        let a2d = Array2D::new(2, 2, 456456);
+
+        assert_eq!(a2d_chunk.get(2, 2), 0);
+        assert_eq!(a2d_chunk.get(2, 3), 0);
+        assert_eq!(a2d_chunk.get(3, 2), 0);
+        assert_eq!(a2d_chunk.get(3, 3), 0);
+        a2d_chunk.set_chunk(4, &a2d).unwrap();
+        assert_eq!(a2d_chunk.get(2, 2), 456456);
+        assert_eq!(a2d_chunk.get(2, 3), 456456);
+        assert_eq!(a2d_chunk.get(3, 2), 456456);
+        assert_eq!(a2d_chunk.get(3, 3), 456456);
     }
 }
