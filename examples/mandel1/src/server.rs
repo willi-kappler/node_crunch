@@ -70,7 +70,7 @@ impl MandelServer {
 
 impl NCServer for MandelServer {
     /// Every node needs some data to process. Here this data is prepared for each node and some book keeping is saved in the chunks list.
-    /// The whole mandelbrot image is split up into equally sized pieces and processed separatelly.
+    /// The whole mandelbrot image is split up into equally sized pieces and processed separately.
     /// Returns the NCJobStatus that is checked by the server.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
@@ -121,9 +121,9 @@ impl NCServer for MandelServer {
 
                 if current_chunk.is_processing(node_id) {
                     current_chunk.set_finished();
-                    self.array2d_chunk.set_chunk(chunk_id, &source).map_err(|e| NCError::Array2D(e))
+                    self.array2d_chunk.set_chunk(chunk_id, &source)
                 } else {
-                    error!("Missmatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
+                    error!("Mismatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
                     Err(NCError::NodeIDMismatch(node_id, current_chunk.node_id))
                 }
             },
