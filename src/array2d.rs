@@ -178,7 +178,7 @@ enum ChunkStatus {
     Empty,
     /// 2. processing: at least one node is processing the data.
     Processing,
-    /// 3. finished: this piece of data has been processed sucessfully.
+    /// 3. finished: this piece of data has been processed successfully.
     Finished,
 }
 
@@ -210,7 +210,7 @@ impl<T> Chunk<T> {
         self.node_id = node_id;
     }
 
-    /// Checks if the chunk is currently beeing processed.
+    /// Checks if the chunk is currently being processed.
     pub fn is_processing(&self, node_id: NodeID) -> bool {
         self.status == ChunkStatus::Processing &&
         self.node_id == node_id

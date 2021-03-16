@@ -170,7 +170,7 @@ struct NodeHeartbeat {
 }
 
 impl NodeHeartbeat {
-    /// Creats a new NodeHeartbeat with the given arguments.
+    /// Creates a new NodeHeartbeat with the given arguments.
     fn new(server_addr: SocketAddr, node_id: NodeID, retry_counter: u64, heartbeat_duration: u64) -> Self {
         debug!("NodeHeartbeat::new()");
 
@@ -376,7 +376,7 @@ impl<T: NCNode> NodeProcess<T> {
 /// When the connection to the server is working again, the counter is reset to its initial value.
 #[derive(Debug, Clone)]
 struct RetryCounter {
-    /// The initial value for the counter. It can be resetted to this value when a message has been send / received successfully.
+    /// The initial value for the counter. It can be reset to this value when a message has been send / received successfully.
     init: u64,
     /// The current value for the counter. It will be decremented in an IO error case.
     counter: u64,

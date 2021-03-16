@@ -1,5 +1,5 @@
 //! This module contains the node id and node info data structure.
-//! NodeID is just a newtype pattern for a integer number.
+//! NodeID is just a new type pattern for a integer number.
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
 use std::time::Instant;
@@ -8,11 +8,11 @@ use std::fmt;
 use rand::random;
 use serde::{Serialize, Deserialize};
 
-/// Newtype pattern for the node id.
+/// New type pattern for the node id.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NodeID(u64);
 
-/// This data strutcure contains the node id and the time stamps for the heartbeat.
+/// This data structure contains the node id and the time stamps for the heartbeat.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct NCNodeInfo {
     pub(crate) node_id: NodeID,
@@ -92,7 +92,7 @@ impl NCNodeList {
         new_id
     }
 
-    /// Update the heartbeat timstamp for the given node.
+    /// Update the heartbeat timestamp for the given node.
     /// This happens when the heartbeat thread in the nc_node module has send the NCNodeMessage::HeartBeat message to the server.
     pub(crate) fn update_heartbeat(&mut self, node_id: NodeID) {
         for node in self.nodes.iter_mut() {

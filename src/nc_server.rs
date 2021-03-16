@@ -59,7 +59,7 @@ pub trait NCServer {
     }
     /// This method is called when the node requests new data with the NCNodeMessage::NeedsData message.
     /// It's the servers task to prepare the data for each node individually.
-    /// For exmaple a 2D array can be split up into smaller pieces that are processed by each node.
+    /// For example a 2D array can be split up into smaller pieces that are processed by each node.
     /// Usually the server will have an internal data structure containing all the registered nodes.
     /// According to the status of the job this method returns a NCJobStatus value:
     /// Unfinished, Waiting or Finished.
@@ -209,7 +209,7 @@ impl ServerHeartbeat {
         }
     }
 
-    /// The current thread sleeps for the configured abount of time:
+    /// The current thread sleeps for the configured amount of time:
     /// 2 * heartbeat
     fn sleep(&self) {
         debug!("ServerHeartbeat::sleep()");
