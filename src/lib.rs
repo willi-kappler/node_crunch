@@ -9,6 +9,7 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
+// - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
 
 mod nc_server;
 mod nc_node;
