@@ -4,7 +4,7 @@ use std::{io, net, sync};
 
 use thiserror::Error;
 
-use crate::{NodeID, array2d::Array2DError};
+use crate::NodeID;
 
 /// This data structure contains all error codes for the server and the nodes.
 #[derive(Error, Debug)]
@@ -37,8 +37,8 @@ pub enum NCError {
     #[error("Mutex poisson error")]
     MutexPoison,
     /// An error using the utility data structure Array2D.
-    #[error("Array2D error: {0}")]
-    Array2D(Array2DError),
+    #[error("Array2D dimension mismatch error, expected: {0:?}, got: {1:?}")]
+    Array2DDimensionMismatch((u64, u64), (u64, u64)),
     /// Custom user defined error. This needs to be replaced in the future with Box<dyn Error> or s.th. similar.
     #[error("Custom user defined error: {0}")]
     Custom(u32),

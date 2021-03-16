@@ -2,35 +2,12 @@
 //! Array2D and Array2DChunk take care of splitting up the 2D array into chunks
 //! that can be sent to the node in order to process them.
 
-use std::{error, fmt};
 use std::slice::{Chunks, ChunksMut};
 
 use serde::{Serialize, Deserialize};
 
 use crate::nc_node_info::NodeID;
-
-/// Currently only one error when the dimension do not match.
-#[derive(Debug)]
-pub enum Array2DError {
-    /// The given dimension does not match with the dimension of the Array2DChunk.
-    DimensionMismatch,
-}
-
-impl fmt::Display for Array2DError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Array2DError::DimensionMismatch => write!(f, "Dimensions do not match: "),
-        }
-    }
-}
-
-impl error::Error for Array2DError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Array2DError::DimensionMismatch => None,
-        }
-    }
-}
+use crate::nc_error::NCError;
 
 /// Contains the 2D data, the width and the height od the 2D array.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,14 +126,14 @@ impl<T: Clone + Copy> Array2DChunk<T> {
     }
 
     /// Sets the chunk data for the given chunk id.
-    pub fn set_chunk(&mut self, chunk_id: u64, source: &Array2D<T>) -> Result<(), Array2DError> {
+    pub fn set_chunk(&mut self, chunk_id: u64, source: &Array2D<T>) -> Result<(), NCError> {
         let (x, y, width, height) = self.get_chunk_property(chunk_id);
 
         if (width == source.width) && (height == source.height) {
             self.array2d.set_region(x, y, source);
             Ok(())
         } else {
-            Err(Array2DError::DimensionMismatch)
+            Err(NCError::Array2DDimensionMismatch((width, height), (source.width, source.height)))
         }
     }
 
