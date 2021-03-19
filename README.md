@@ -29,7 +29,7 @@ Allows to distribute computations across several nodes.
 - Easy to use API.
 - If one of the nodes crashes the server and all other nodes can still continue with their work. (Heartbeat messages are used internally.)
 - While running the user application more nodes can be added to speed up computation even more.
-- The nodes can be a mixture of different OS and hardware achitecture. If it compiles it runs.
+- The nodes can be a mixture of different OS and hardware architecture. If it compiles it runs.
 
 **Note 1:** *It is still in development and the API may change.*
 
@@ -41,7 +41,9 @@ Node Crunch is a crate that allows users to write distributed code easily. The c
 
 This is reflected in the two traits that must be implemented for Node Crunch to work:
 
-![Node Crunch Logo](NodeCrunch.png)
+<p align="center">
+    <img src="NodeCrunch.png" alt="Overview" title="Overview" />
+</p>
 
 1. The **NCSever** trait. This contains the functionality for the server. Here the data is split up for the nodes to do the computation and later the data is collected from all the nodes. The trait has five functions that have to be implemented accordingly:
 
@@ -168,7 +170,7 @@ Since there is only one server and lots of nodes, the node mode should be the de
 ```bash
 ./myapp -s & # option "-s" means run in server mode.
 
-./myapp & # start one task in node mode, this is used more often so no need to specity this mode.
+./myapp & # start one task in node mode, this is used more often so no need to specify this mode.
 
 ./myapp & # start another task in node mode.
 
@@ -232,7 +234,7 @@ The batch file "run_single.sbatch" may look like this, we're using the command l
 ## How much memory will this job consume at maximum, here for example 128 MB
 #SLURM --mem-per-cpu=128
 
-# Ensure that all the binaries are availavle on all the cluster nodes at the same place.
+# Ensure that all the binaries are available on all the cluster nodes at the same place.
 # Usually this is done in the cluster setup via NFS or some other distributed
 # filesystem already.
 
@@ -278,7 +280,7 @@ Here the file "run_single.qsub" may look like this:
 ## How much memory will this job consume at maximum, here for example 128 MB
 #PBS -l pmem=128mb
 
-# Ensure that all the binaries are availavle on all the cluster nodes at the same place.
+# Ensure that all the binaries are available on all the cluster nodes at the same place.
 # Usually this is done in the cluster setup via NFS or some other distributed
 # filesystem already.
 
@@ -286,7 +288,7 @@ Here the file "run_single.qsub" may look like this:
 myapp --ip ip_of_server
 ```
 
-And again like with the other job scheduler you can just start additinal jobs at any time to speed up the computation.
+And again like with the other job scheduler you can just start additional jobs at any time to speed up the computation.
 
 ## Full working examples
 
