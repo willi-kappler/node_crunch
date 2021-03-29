@@ -8,17 +8,51 @@ use bincode::{deserialize, serialize};
 
 use crate::nc_error::NCError;
 
-/// Encode data to a Vec<u8>.
+/// Encodes the given data to a `Vec<u8>`.
+///
+/// # Errors
+///
+/// On failure it returns a `NCError::Serialize(e)` error which contains the serde serialize error.
+///
+/// # Examples
+/// ```rust
+/// # use node_crunch::{NCError, nc_encode_data};
+/// # fn main() -> Result<(), NCError> {
+/// let data1 = (12, "Hello World", false);
+/// let data2 = nc_encode_data(&data1)?;
+/// # Ok(())
+/// # }
+/// ```
 pub fn nc_encode_data<S: Serialize>(data: &S) -> Result<Vec<u8>, NCError> {
     serialize(data).map_err(|e| NCError::Serialize(e))
 }
 
-/// Decode data from a &[u8] slice to the type T.
+/// Decode the given data from a `&[u8]` slice to the type `T`.
+///
+/// # Errors
+///
+/// On failure it returns a `NCError::Deserialize(e)` error which contains the serde deserialize error.
+///
+/// # Examples
+/// ```rust
+/// # use node_crunch::{NCError, nc_encode_data, nc_decode_data};
+/// # fn main() -> Result<(), NCError> {
+/// let data1 = (12, "Hello World", false);
+/// let data2 = nc_encode_data(&data1)?;
+/// let data3: (i32, &str, bool) = nc_decode_data(&data2)?;
+/// assert_eq!(data3, data1);
+/// # Ok(())
+/// # }
+/// ```
 pub fn nc_decode_data<'de, D: Deserialize<'de>>(data: &'de [u8]) -> Result<D, NCError> {
     deserialize(data).map_err(|e| NCError::Deserialize(e))
 }
 
-/// Decode data from an owned reference &[u8] to the type T.
+/// Decode the data from an owned reference `&[u8]` to the type `T`.
+///
+/// # Errors
+///
+/// On failure it returns a `NCError::Deserialize(e)` error which contains the serde deserialize error.
 pub fn nc_decode_data2<D: DeserializeOwned>(data: &[u8]) -> Result<D, NCError> {
     deserialize(data).map_err(|e| NCError::Deserialize(e))
 }
