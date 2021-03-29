@@ -21,7 +21,7 @@ pub enum NCError {
     /// Data coming from the network could not be deserialized.
     #[error("Deserialize bincode error: {0}")]
     Deserialize(bincode::Error),
-    /// The bincode crate has its own error.
+    /// The [`bincode`] crate has its own error.
     #[error("Bincode error: {0}")]
     Bincode(#[from] Box<bincode::ErrorKind>),
     /// The node expected a specific message from the server but got s.th. totally different.
@@ -33,13 +33,13 @@ pub enum NCError {
     /// A different node id was expected. Expected first node id, found second node id.
     #[error("Node id mismatch error, expected: {0}, found: {1}")]
     NodeIDMismatch(NodeID, NodeID),
-    /// Mutex could not be locked or a thread did panic while holding the lock.
+    /// [`Mutex`](std::sync::Mutex) could not be locked or a thread did panic while holding the lock.
     #[error("Mutex poisson error")]
     MutexPoison,
-    /// An error using the utility data structure Array2D.
+    /// An error using the utility data structure [`Array2D`](crate::Array2D).
     #[error("Array2D dimension mismatch error, expected: {0:?}, got: {1:?}")]
     Array2DDimensionMismatch((u64, u64), (u64, u64)),
-    /// Custom user defined error. This needs to be replaced in the future with Box<dyn Error> or s.th. similar.
+    /// Custom user defined error. This needs to be replaced in the future with [`Box<dyn Error>`] or s.th. similar.
     #[error("Custom user defined error: {0}")]
     Custom(u32),
 }

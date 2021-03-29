@@ -15,11 +15,14 @@ pub struct NodeID(u64);
 /// This data structure contains the node id and the time stamps for the heartbeat.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct NCNodeInfo {
+    /// The id of the node.
     pub(crate) node_id: NodeID,
+    /// Time stamp for the node id since the last valid heartbeat.
     pub(crate) instant: Instant,
 }
 
 pub(crate) struct NCNodeList {
+    /// List of all nodes that have been registered.
     nodes: Vec<NCNodeInfo>,
 }
 
@@ -64,8 +67,10 @@ impl NCNodeList {
         NCNodeList { nodes: Vec::new() }
     }
 
-    /// All the registered nodes are checked here. If the heartbeat time stamp is too old (> 2 * heartbeat in NCConfiguration) then
-    /// the NCServer trait method heartbeat_timeout() is called where the node should be marked as offline.
+    /// All the registered nodes are checked here. If the heartbeat time stamp
+    /// is too old (> 2 * heartbeat in [`NCConfiguration`](crate::nc_config::NCConfiguration)) then
+    /// the NCServer trait method [`heartbeat_timeout()`](crate::nc_server::NCServer::heartbeat_timeout)
+    /// is called where the node should be marked as offline.
     pub(crate) fn check_heartbeat(&self, heartbeat_duration: u64) -> impl Iterator<Item=NodeID> + '_ {
         self.nodes.iter().filter(move |node| node.heartbeat_invalid(heartbeat_duration)).map(|node| node.node_id)
     }
@@ -93,7 +98,8 @@ impl NCNodeList {
     }
 
     /// Update the heartbeat timestamp for the given node.
-    /// This happens when the heartbeat thread in the nc_node module has send the NCNodeMessage::HeartBeat message to the server.
+    /// This happens when the heartbeat thread in the [`nc_node`](crate::nc_node) module
+    /// has send the [`NCNodeMessage::HeartBeat`](crate::nc_node::NCNodeMessage) message to the server.
     pub(crate) fn update_heartbeat(&mut self, node_id: NodeID) {
         for node in self.nodes.iter_mut() {
             if node.node_id == node_id {

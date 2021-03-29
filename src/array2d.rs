@@ -1,5 +1,5 @@
 //! This module contains helper structures to deal with 2D data.
-//! Array2D and Array2DChunk take care of splitting up the 2D array into chunks
+//! [`Array2D`] and [`Array2DChunk`] take care of splitting up the 2D array into chunks
 //! that can be sent to the node in order to process them.
 
 use std::slice::{Chunks, ChunksMut};
@@ -21,7 +21,7 @@ pub struct Array2D<T> {
 }
 
 impl<T: Clone + Copy> Array2D<T> {
-    /// Creates a new Array2D with the given dimension and the initial fill value.
+    /// Creates a new [`Array2D`] with the given dimension and the initial fill value.
     pub fn new(width: u64, height: u64, initial: T) -> Array2D<T> {
         assert!(width > 0);
         assert!(height > 0);
@@ -33,17 +33,17 @@ impl<T: Clone + Copy> Array2D<T> {
         }
     }
 
-    /// Calculates the correct index into the Vector for the given (x, y) position.
+    /// Calculates the correct index into the [`Vec`] for the given `(x, y)` position.
     fn index(&self, x: u64, y: u64) -> usize {
         ((self.width * y) + x) as usize
     }
 
-    /// Returns the value at the given (x, y) position.
+    /// Returns the value at the given `(x, y)` position.
     pub fn get(&self, x: u64, y: u64) -> T {
         self.data[self.index(x, y)]
     }
 
-    /// Sets the value at the given (x, y) position.
+    /// Sets the value at the given `(x, y)` position.
     pub fn set(&mut self, x: u64, y: u64, value: T) {
         let index = self.index(x, y);
         self.data[index] = value;
@@ -59,13 +59,13 @@ impl<T: Clone + Copy> Array2D<T> {
     }
 
     /// Returns an iterator over all rows.
-    /// This can be used with rayons par_bridge() for example.
+    /// This can be used with rayons `par_bridge()` for example.
     pub fn split_rows(&self) -> Chunks<'_, T> {
         self.data.chunks(self.width as usize)
     }
 
     /// Returns a mutable iterator over all rows.
-    /// This can be used with rayons par_bridge() for example.
+    /// This can be used with rayons `par_bridge()` for example.
     pub fn split_row_mut(&mut self) -> ChunksMut<'_, T> {
         self.data.chunks_mut(self.width as usize)
     }
@@ -78,9 +78,9 @@ pub struct Array2DChunk<T> {
     chunk_width: u64,
     /// The height of each individual chunk.
     chunk_height: u64,
-    /// If chunks do not fit in array2d this is the rest in x direction.
+    /// If chunks do not fit in `array2d` this is the rest in x direction.
     rest_width: u64,
-    /// If chunks do not fit in array2d this is the rest in y direction.
+    /// If chunks do not fit in `array2d` this is the rest in y direction.
     rest_height: u64,
     /// Number of chunks in x direction.
     chunks_x: u64,
@@ -91,7 +91,7 @@ pub struct Array2DChunk<T> {
 }
 
 impl<T: Clone + Copy> Array2DChunk<T> {
-    /// Creates a new Array2DChunk with the given width, height, chunk_width and chunk_height.
+    /// Creates a new [`Array2DChunk`] with the given `width`, `height`, `chunk_width` and `chunk_height`.
     pub fn new(width: u64, height: u64, chunk_width: u64, chunk_height: u64, initial: T) -> Array2DChunk<T> {
         assert!(width > 0);
         assert!(height > 0);
@@ -124,7 +124,7 @@ impl<T: Clone + Copy> Array2DChunk<T> {
     }
 
     /// Returns the property of the chunk for the given chunk ID.
-    /// The (x, y) and the width and the height of the chunk.
+    /// The `(x, y)` and the width and the height of the chunk.
     pub fn get_chunk_property(&self, chunk_id: u64) -> (u64, u64, u64, u64) {
         let cy = chunk_id / self.chunks_x;
         let cx = chunk_id - (cy * self.chunks_x);
@@ -147,12 +147,12 @@ impl<T: Clone + Copy> Array2DChunk<T> {
         }
     }
 
-    /// Returns the data at the given (x, y) position
+    /// Returns the data at the given `(x, y)` position
     pub fn get(&self, x: u64, y: u64) -> T {
         self.array2d.get(x, y)
     }
 
-    /// Returns the dimension (width, height) for the whole Array2D data
+    /// Returns the dimension `(width, height)` for the whole [`Array2D`] data
     pub fn dimensions(&self) -> (u64, u64) {
         (self.array2d.width, self.array2d.height)
     }
@@ -222,10 +222,10 @@ impl<T> ChunkList<T> {
     }
 
     /// Returns some statistics about the chunks in the list as a three tuple:
-    /// 1. empty: how many chunks have not been assigned yet
-    /// 2. processing: how many chunks are assigned to nodes.
-    /// 3. finished: how many chunks are done with processing.
-    /// (empty, processing, finished)
+    /// 1. `empty`: how many chunks have not been assigned yet
+    /// 2. `processing`: how many chunks are assigned to nodes.
+    /// 3. `finished`: how many chunks are done with processing.
+    /// `(empty, processing, finished)`
     pub fn stats(&self) -> (u64, u64, u64) {
         let mut empty: u64 = 0;
         let mut processing: u64 = 0;
@@ -243,7 +243,7 @@ impl<T> ChunkList<T> {
     }
 
     /// If there is a free chunk in the list return the index and a mutable reference to it.
-    /// Else return None if all chunks are in processing or finished state.
+    /// Else return [`None`] if all chunks are in processing or finished state.
     pub fn get_next_free_chunk(&mut self) -> Option<(usize, &mut Chunk<T>)> {
         self.chunks.iter().position(|chunk| chunk.is_empty()).map(move |index| (index, &mut self.chunks[index]))
     }
@@ -254,7 +254,7 @@ impl<T> ChunkList<T> {
     }
 
     /// Some nodes may have crashed or lost the network connection.
-    /// Sets all the chunks that these nodes have been processing to the empty state ChunkStatus::Empty.
+    /// Sets all the chunks that these nodes have been processing to the empty state.
     pub fn heartbeat_timeout(&mut self, nodes: &[NodeID]) {
         for chunk in self.chunks.iter_mut() {
             for node_id in nodes.iter() {

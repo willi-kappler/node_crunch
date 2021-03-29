@@ -9,7 +9,8 @@ pub struct NCConfiguration{
     /// Port used by the server
     pub port: u16,
     /// Nodes have to send a heartbeat every n seconds or they will be marked as offline.
-    /// The method heartbeat_timeout(node_id) with the corresponding node ID is called.
+    /// (The method [`heartbeat_timeout(node_id)`](crate::nc_server::NCServer::heartbeat_timeout)
+    /// with the corresponding node ID is called).
     pub heartbeat: u64,
     /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
     pub delay_request_data: u64,
