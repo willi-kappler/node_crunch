@@ -12,13 +12,13 @@
 // - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
 // - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
 
-mod nc_server;
-mod nc_node;
-mod nc_node_info;
-mod nc_error;
-mod nc_config;
-mod nc_util;
-mod array2d;
+pub mod nc_server;
+pub mod nc_node;
+pub mod nc_node_info;
+pub mod nc_error;
+pub mod nc_config;
+pub mod nc_util;
+pub mod array2d;
 
 pub use nc_server::{NCServer, NCJobStatus, NCServerStarter};
 pub use nc_node::{NCNode, NCNodeStarter};
