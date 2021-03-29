@@ -31,7 +31,7 @@ pub fn nc_encode_data<S: Serialize>(data: &S) -> Result<Vec<u8>, NCError> {
 ///
 /// # Errors
 ///
-/// On failure it returns a `NCError::Deserialize(e)` error which contains the serde deserialize error.
+/// On failure it returns a [NCError::Deserialize] error which contains the serde deserialize error.
 ///
 /// # Examples
 /// ```rust
@@ -52,18 +52,26 @@ pub fn nc_decode_data<'de, D: Deserialize<'de>>(data: &'de [u8]) -> Result<D, NC
 ///
 /// # Errors
 ///
-/// On failure it returns a `NCError::Deserialize(e)` error which contains the serde deserialize error.
+/// On failure it returns a [NCError::Deserialize] error which contains the serde deserialize error.
 pub fn nc_decode_data2<D: DeserializeOwned>(data: &[u8]) -> Result<D, NCError> {
     deserialize(data).map_err(|e| NCError::Deserialize(e))
 }
 
 /// Open a tcp connection and sends the data using the nc_send_data2() function.
+///
+/// # Errors
+///
+/// On failure it returns a [NCError].
 pub(crate) fn nc_send_data<S: Serialize, A: ToSocketAddrs>(data: &S, socket_addr: &A) -> Result<(), NCError> {
     let mut tcp_stream = TcpStream::connect(socket_addr)?;
     nc_send_data2(data, &mut tcp_stream)
 }
 
 /// Serialize the data and send it to the given Writer (usually a tcp stream).
+///
+/// # Errors
+///
+/// On failure it returns a [NCError].
 pub(crate) fn nc_send_data2<S: Serialize, W: Write>(data: &S, tcp_stream: &mut W) -> Result<(), NCError> {
     let data = nc_encode_data(data)?;
     let data_len = data.len() as u64; // u64 is platform independent, usize is platform dependent
@@ -75,6 +83,10 @@ pub(crate) fn nc_send_data2<S: Serialize, W: Write>(data: &S, tcp_stream: &mut W
 
 /// Read data from the given Reader (usually a tcp stream) and deserialize it.
 /// Return the deserialized data as a Result.
+///
+/// # Errors
+///
+/// On failure it returns a [NCError].
 pub(crate) fn nc_receive_data<D: DeserializeOwned, R: Read>(tcp_stream: &mut R) -> Result<D, NCError> {
     let mut data_len: [u8; 8] = [0; 8];
     tcp_stream.read_exact(&mut data_len)?;
@@ -89,6 +101,10 @@ pub(crate) fn nc_receive_data<D: DeserializeOwned, R: Read>(tcp_stream: &mut R) 
 
 /// Open a tcp stream, send the data using the nc_send_data2() function and receive data using the nc_receive_data() function.
 /// Return the deserialized data as a Result.
+///
+/// # Errors
+///
+/// On failure it returns a [NCError].
 pub(crate) fn nc_send_receive_data<S: Serialize, D: DeserializeOwned, A: ToSocketAddrs>(data: &S, socket_addr: &A) -> Result<D, NCError> {
     let mut tcp_stream = TcpStream::connect(socket_addr)?;
 
