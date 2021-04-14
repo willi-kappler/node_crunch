@@ -95,11 +95,8 @@ impl NCServerStarter {
         debug!("NCServerStarter::new()");
 
         let time_start = Instant::now();
-        // let job_done = Arc::new(AtomicBool::new(false));
-
         let server_process = ServerProcess::new(&self.config, nc_server);
         let server_heartbeat = ServerHeartbeat::new(&self.config);
-
         let thread_pool = ThreadPool::new((self.config.pool_size + 1) as usize);
 
         self.start_heartbeat_thread(&thread_pool, server_heartbeat);
