@@ -9,8 +9,17 @@
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
-// - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
 // - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
+//
+// Examples to add:
+// - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
+// - Distributed machine learning ?
+// - Distributed black hole simulation ?
+// - Distributed crypto mining ?
+//
+// Own projects that will use node_crunch:
+// - Darwin: https://github.com/willi-kappler/darwin-rs
+// - GRONN: https://github.com/willi-kappler/gronn
 
 pub mod nc_server;
 pub mod nc_node;
