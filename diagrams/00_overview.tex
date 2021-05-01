@@ -4,8 +4,9 @@
 
 \tikzstyle{server} = [rectangle, rounded corners, text centered, draw=black, fill=green!30, inner sep=5pt]
 \tikzstyle{node} = [rectangle, rounded corners, text centered, draw=black, fill=blue!30, inner sep=5pt]
-\tikzstyle{arrow1} = [thick, ->, >=stealth]
-\tikzstyle{arrow2} = [blue, dashed, ->, >=stealth]
+
+\tikzstyle{server_message} = [thick, ->, >=stealth]
+\tikzstyle{node_message} = [blue, dashed, ->, >=stealth]
 
 \begin{document}
 
@@ -20,17 +21,17 @@
         \node (ncnode5) [node] {NCNode}; \\
     };
 
-    \draw [arrow1] (ncserver) -- (ncnode1);
-    \draw [arrow1] (ncserver) -- (ncnode2);
-    \draw [arrow1] (ncserver) -- (ncnode3);
-    \draw [arrow1] (ncserver) to [out=260, in=100] (ncnode4);
-    \draw [arrow1] (ncserver) -- (ncnode5);
+    \draw [server_message] (ncserver) -- (ncnode1);
+    \draw [server_message] (ncserver) -- (ncnode2);
+    \draw [server_message] (ncserver) -- (ncnode3);
+    \draw [server_message] (ncserver) to [out=260, in=100] (ncnode4);
+    \draw [server_message] (ncserver) -- (ncnode5);
 
-    \draw [arrow2] (ncnode1) to [out=30, in=150] (ncserver);
-    \draw [arrow2] (ncnode2) to [out=150, in=30] (ncserver);
-    \draw [arrow2] (ncnode3) to [out=0, in=240] (ncserver);
-    \draw [arrow2] (ncnode5) to [out=180, in=300] (ncserver);
-    \draw [arrow2] (ncnode4) to [out=80, in=280] (ncserver);
+    \draw [node_message] (ncnode1) to [out=30, in=150] (ncserver);
+    \draw [node_message] (ncnode2) to [out=150, in=30] (ncserver);
+    \draw [node_message] (ncnode3) to [out=0, in=240] (ncserver);
+    \draw [node_message] (ncnode5) to [out=180, in=300] (ncserver);
+    \draw [node_message] (ncnode4) to [out=80, in=280] (ncserver);
 
     \draw [white] (-1, -2.9) rectangle (1, -2.8);
 
@@ -39,12 +40,12 @@
     \node (label1a) at (-3.4, -2) {};
     \node [font=\small] (label1b) at (-1, -2) {NCServerMessage};
 
-    \draw [arrow1] (label1a) -- (label1b);
+    \draw [server_message] (label1a) -- (label1b);
 
     \node (label2a) at (-3.4, -2.5) {};
     \node [font=\small] (label2b) at (-1, -2.5) {NCNodeMessage};
 
-    \draw [arrow2] (label2a) -- (label2b);
+    \draw [node_message] (label2a) -- (label2b);
 
 \end{tikzpicture}
 
