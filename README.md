@@ -28,7 +28,7 @@ Allows to distribute computations across several nodes.
 - 100% safe Rust.
 - Easy to use API.
 - If one of the nodes crashes the server and all other nodes can still continue with their work. (Heartbeat messages are used internally.)
-- While running the user application more nodes can be added to speed up computation even more.
+- While running the user application more nodes can be added dynamically to speed up computation even more.
 - The nodes can be a mixture of different OS and hardware architecture. If it compiles it runs.
 
 **Note 1:** *It is still in development and the API may change.*
@@ -42,7 +42,7 @@ Node Crunch is a crate that allows users to write distributed code easily. The c
 This is reflected in the two traits that must be implemented for Node Crunch to work:
 
 <p align="center">
-    <img src="NodeCrunch.png" alt="Overview" title="Overview" />
+    <img src="diagrams/00_overview.png" alt="Overview" title="Overview" />
 </p>
 
 1. The **NCSever** trait. This contains the functionality for the server. Here the data is split up for the nodes to do the computation and later the data is collected from all the nodes. The trait has five functions that have to be implemented accordingly:
@@ -67,6 +67,13 @@ This is reflected in the two traits that must be implemented for Node Crunch to 
     2.1 `set_initial_data()` When the node contacts the server for the first time the new node id is given to the node here along with some optional initial data. This method only has to be implemented when there is a need for some initial data.
 
     2.2 `process_data_from_server()` Here the main processing is done by the node code. This method receives the data that has to be processed and returns the processed data.
+
+<p align="center">
+    <img src="diagrams/01_start.png" alt="Overview" title="Overview" />
+</p>
+
+
+
 
 Both traits will be implemented for the user defined data structures that are passed to the starter for the server and the starter for the node.
 
