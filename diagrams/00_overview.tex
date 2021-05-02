@@ -1,6 +1,8 @@
 \documentclass[convert={density=1200}]{standalone}
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{matrix}
+\usetikzlibrary{positioning}
 
 \tikzstyle{server} = [rectangle, rounded corners, text centered, draw=black, fill=green!30, inner sep=5pt]
 \tikzstyle{node} = [rectangle, rounded corners, text centered, draw=black, fill=blue!30, inner sep=5pt]
@@ -12,7 +14,7 @@
 
 \begin{tikzpicture}
 
-    \matrix [column sep = 10mm, row sep = 10mm] {
+    \matrix [column sep=10mm, row sep=10mm] {
         \node (ncnode1) [node] {NCNode}; &
         \node (ncserver) [server] {NCServer}; &
         \node (ncnode2) [node] {NCNode}; \\
@@ -33,18 +35,14 @@
     \draw [node_message] (ncnode5) to [out=180, in=300] (ncserver);
     \draw [node_message] (ncnode4) to [out=80, in=280] (ncserver);
 
-    \draw [white] (-1, -2.9) rectangle (1, -2.8);
+    \draw [white] (-1, -3.0) rectangle (1, -2.9);
 
-    \draw (-3.5, -2.8) rectangle (0.5, -1.7);
-
-    \node (label1a) at (-3.4, -2) {};
-    \node [font=\small] (label1b) at (-1, -2) {NCServerMessage};
+    \matrix [column sep=10mm, row sep=0.3mm, rectangle, draw=black] at (-1.4, -2.1) {
+        \node (label1a) {}; & \node [font=\small] (label1b) {NCServerMessage}; \\
+        \node (label2a) {}; & \node [font=\small] (label2b) {NCNodeMessage}; \\
+    };
 
     \draw [server_message] (label1a) -- (label1b);
-
-    \node (label2a) at (-3.4, -2.5) {};
-    \node [font=\small] (label2b) at (-1, -2.5) {NCNodeMessage};
-
     \draw [node_message] (label2a) -- (label2b);
 
 \end{tikzpicture}
