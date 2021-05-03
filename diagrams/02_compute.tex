@@ -1,8 +1,6 @@
 \documentclass[convert={density=1200}]{standalone}
 \usepackage{tikz}
-\usetikzlibrary{shapes.geometric, arrows}
-\usetikzlibrary{matrix}
-\usetikzlibrary{positioning}
+\usetikzlibrary{shapes.geometric, arrows, matrix, positioning, automata}
 
 \tikzstyle{server} = [rectangle, rounded corners, text centered, draw=black, fill=green!30, inner sep=5pt]
 \tikzstyle{node} = [rectangle, rounded corners, text centered, draw=black, fill=blue!30, inner sep=5pt]
@@ -45,21 +43,19 @@
     \draw [action_step] (loop) -- (connect1);
     \draw [action_step] (connect1) -- (node_process);
     \draw [action_step] (node_process) -- node [right, text width=2.5cm] {after heavy computation...} (connect2);
-    % \draw [action_step] (connect2) -- node {} ++(0, -0.75) -- node {} ++(3, 0) |- (loop);
     \draw [action_step] (connect2.south) |- ++(3.2, -0.4) |- (loop.east);
 
     \draw [node_message] (connect1) -- node [above] {NeedsData} (connected1);
     \draw [server_message] (prepare) -- node [above] {JobStatus::Unfinished} (node_process);
-    % \draw [action_step] (prepare) -- node {} ++(0, -0.75) -- node {} ++(-3, 0) |- (wait);
     \draw [action_step] (prepare.south) |- ++(-3, -0.4) |- (wait.west);
 
 
     \draw [node_message] (connect2) -- node [above] {HasData} (connected2);
     \draw [action_step] (connected2) -- (server_process);
 
-    % \draw [action_step] (server_process) -- node {} ++(0, -0.75) -- node {} ++(-3.5, 0) |- (wait);
     \draw [action_step] (server_process.south) |- ++(-3.5, -0.4) |- (wait.west);
 
+    \draw [action_step] (wait.310) to (connected2.50);
 
     % Add bottom page border with invisible node
     \node at (0, -8.5) {};
