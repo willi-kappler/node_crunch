@@ -72,8 +72,9 @@ This is reflected in the two traits that must be implemented for Node Crunch to 
     <img src="diagrams/01_start.png" alt="Overview" title="Overview" />
 </p>
 
-
-
+<p align="center">
+    <img src="diagrams/02_compute.png" alt="Overview" title="Overview" />
+</p>
 
 Both traits will be implemented for the user defined data structures that are passed to the starter for the server and the starter for the node.
 
