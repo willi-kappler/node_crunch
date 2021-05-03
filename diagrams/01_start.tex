@@ -43,15 +43,19 @@
     \draw [node_message] (connect) -- node [above] {Register} (connected);
     \draw [server_message] (initial) -- node [above] {InitialData} (set_initial);
 
-    \draw [action_step] (initial) -- node {} ++(0, -0.75) -- node {} ++(-2, 0) -- node {} ++(0, 3) -- (wait);
+    % \draw [action_step] (initial) -- node {} ++(0, -0.75) -- node {} ++(-2, 0) -- node {} ++(0, 3) -- (wait);
+    \draw [action_step] (initial.south) |- ++(-2.1, -0.4) |- (wait.west);
 
 
     % Add bottom page border with invisible node
     \node at (0, -6.5) {};
 
+    % Add left page border with invisible node
+    \node at (-5.3, 0) {};
+
     \matrix [column sep=10mm, row sep=2.0mm, rectangle, draw=black,
              column 2/.style={anchor=west}
-        ] at (-2.1, -4.5) {
+        ] at (-2.2, -4.5) {
         \node (label1a) {}; & \node [font=\small] (label1b) {NCServerMessage}; \\
         \node (label2a) {}; & \node [font=\small] (label2b) {NCNodeMessage}; \\
         \node (label3a) {}; & \node [font=\small] (label3b) {state change}; \\
