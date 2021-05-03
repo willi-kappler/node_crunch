@@ -17,41 +17,62 @@
 
 \begin{tikzpicture}
 
-    \matrix [column sep = 20mm, row sep = 5mm] {
+    \matrix [column sep = 35mm, row sep = 5mm] {
         \node (ncserver) [server] {NCServer}; &
         \node (ncnode) [node] {NCNode}; \\
 
         \node (wait) [action] {wait for connections}; &
-        \node (start) [action] {start node}; \\
+        \node (loop) [action] {compute loop}; \\
 
-        \node (connected) [action] {new connection}; &
-        \node (connect) [action] {connect to server}; \\
+        \node (connected1) [action] {new connection}; &
+        \node (connect1) [action] {connect to server}; \\
 
-        \node (initial) [trait] {initial\_data()}; &
-        \node (set_initial) [trait] {set\_initial\_data()}; \\
+        \node (prepare) [trait] {prepare\_data\_for\_node()}; &
+        \node (node_process) [trait] {process\_data\_from\_server()}; \\
 
-        & \node (loop) [action] {compute loop}; \\
+        \node (separator1a) {}; &
+        \node (separator1b) {}; \\
+
+        \node (connected2) [action] {new connection}; &
+        \node (connect2) [action] {connect to server}; \\
+
+        \node (server_process) [trait] {process\_data\_from\_node()}; & \\
     };
 
-    \draw [action_step] (wait) -- (connected);
-    \draw [action_step] (connected) -- (initial);
+    \draw [action_step] (wait) -- (connected1);
+    \draw [action_step] (connected1) -- (prepare);
 
-    \draw [action_step] (start) -- (connect);
-    \draw [action_step] (connect) -- (set_initial);
-    \draw [action_step] (set_initial) -- (loop);
+    \draw [action_step] (loop) -- (connect1);
+    \draw [action_step] (connect1) -- (node_process);
+    \draw [action_step] (node_process) -- node [right, text width=2.5cm] {after heavy computation...} (connect2);
+    % \draw [action_step] (connect2) -- node {} ++(0, -0.75) -- node {} ++(3, 0) |- (loop);
+    \draw [action_step] (connect2.south) |- ++(3.2, -0.4) |- (loop.east);
 
-    \draw [node_message] (connect) -- node [above] {Register} (connected);
-    \draw [server_message] (initial) -- node [above] {InitialData} (set_initial);
+    \draw [node_message] (connect1) -- node [above] {NeedsData} (connected1);
+    \draw [server_message] (prepare) -- node [above] {JobStatus::Unfinished} (node_process);
+    % \draw [action_step] (prepare) -- node {} ++(0, -0.75) -- node {} ++(-3, 0) |- (wait);
+    \draw [action_step] (prepare.south) |- ++(-3, -0.4) |- (wait.west);
 
-    \draw [action_step] (initial) -- node {} ++(0, -0.75)  -- node {} ++(-2, 0) -- node {} ++(0, 3)  -- (wait);
+
+    \draw [node_message] (connect2) -- node [above] {HasData} (connected2);
+    \draw [action_step] (connected2) -- (server_process);
+
+    % \draw [action_step] (server_process) -- node {} ++(0, -0.75) -- node {} ++(-3.5, 0) |- (wait);
+    \draw [action_step] (server_process.south) |- ++(-3.5, -0.4) |- (wait.west);
 
 
     % Add bottom page border with invisible node
-    \node at (0, -6.5) {};
+    \node at (0, -8.5) {};
+
+    % Add left page border with invisible node
+    \node at (-8.2, 0) {};
+
+    % Add right page border with invisible node
+    \node at (7.7, 0) {};
 
     \matrix [column sep=10mm, row sep=2.0mm, rectangle, draw=black,
              column 2/.style={anchor=west}
-        ] at (-2.1, -4.5) {
+        ] at (-5.1, -6.5) {
         \node (label1a) {}; & \node [font=\small] (label1b) {NCServerMessage}; \\
         \node (label2a) {}; & \node [font=\small] (label2b) {NCNodeMessage}; \\
         \node (label3a) {}; & \node [font=\small] (label3b) {state change}; \\
