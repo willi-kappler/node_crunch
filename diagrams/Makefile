@@ -1,9 +1,9 @@
-all: 00_overview.png 01_start.png 02_compute.png
+all: 00_overview.png 01_start.png 02_compute.png 03_finish.png 04_heartbeat.png
 
 .PHONY: clean
 
 clean:
-	rm *.aux *.fdb_latexmk *.fls *.dvi *.log *.ps *.syntex.gz
+	rm *.aux *.fdb_latexmk *.fls *.dvi *.log *.ps *.pdf *.synctex.gz
 
 00_overview.png: 00_overview.tex
 	latex -shell-escape 00_overview.tex
@@ -22,3 +22,15 @@ clean:
 	gm convert 02_compute.png -resize "10%" 02_compute_small.png
 	rm 02_compute.png
 	mv 02_compute_small.png 02_compute.png
+
+03_finish.png: 03_finish.tex
+	latex -shell-escape 03_finish.tex
+	gm convert 03_finish.png -resize "10%" 03_finish_small.png
+	rm 03_finish.png
+	mv 03_finish_small.png 03_finish.png
+
+04_heartbeat.png: 04_heartbeat.tex
+	latex -shell-escape 04_heartbeat.tex
+	gm convert 04_heartbeat.png -resize "10%" 04_heartbeat_small.png
+	rm 04_heartbeat.png
+	mv 04_heartbeat_small.png 04_heartbeat.png
