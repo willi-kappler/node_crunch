@@ -1,0 +1,93 @@
+\documentclass[convert={density=1200}]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, matrix, positioning, automata, backgrounds}
+
+\tikzstyle{server} = [rectangle, rounded corners, text centered, draw=black, fill=green!30, inner sep=5pt]
+\tikzstyle{node} = [rectangle, rounded corners, text centered, draw=black, fill=blue!30, inner sep=5pt]
+\tikzstyle{action} = [rectangle, text centered, draw=black, fill=white, inner sep=5pt]
+\tikzstyle{trait} = [trapezium, text centered, draw=black, fill=yellow!30, inner sep=5pt, text=red!50!black, font=\ttfamily]
+
+\tikzstyle{server_message} = [thick, green!50!black, dashed,->, >=stealth]
+\tikzstyle{node_message} = [thick, blue, dashed, ->, >=stealth]
+\tikzstyle{action_step} = [thick, black, ->, >=stealth]
+
+\begin{document}
+
+\begin{tikzpicture}
+
+    \matrix [column sep = 35mm, row sep = 5mm] {
+        \node (ncserver) [server] {NCServer}; &
+        \node (ncnode) [node] {NCNode}; \\
+
+        \node (wait1) [action] {wait for connections}; &
+        \node (loop1) [action] {compute loop}; \\
+
+        \node (connected1) [action] {new connection}; &
+        \node (connect1) [action] {connect to server}; \\
+
+        \node (prepare1) [trait] {prepare\_data\_for\_node()}; &
+        \node (sleep_delay1) [action] {sleep \ttfamily delay\_request\_data}; \\
+    };
+
+    \draw [action_step] (wait1) -- (connected1);
+    \draw [action_step] (connected1) -- (prepare1);
+
+    \draw [action_step] (loop1) -- (connect1);
+    \draw [action_step] (connect1) -- (sleep_delay1);
+    \draw [action_step] (sleep_delay1.south) |- ++(2.5, -0.4) |- (loop1.east);
+
+    \draw [node_message] (connect1) -- node [above] {NeedsData} (connected1);
+    \draw [server_message] (prepare1) -- node [above] {JobStatus::Waiting} (sleep_delay1);
+    \draw [action_step] (prepare1.south) |- ++(-3, -0.4) |- (wait1.west);
+
+
+    \matrix [column sep = 35mm, row sep = 5mm] at ++(0, -6) {
+        \node (wait2) [action] {wait for connections}; &
+        \node (loop2) [action] {compute loop}; \\
+
+        \node (connected2) [action] {new connection}; &
+        \node (connect2) [action] {connect to server}; \\
+
+        \node (prepare2) [trait] {prepare\_data\_for\_node()}; &
+        \node (retry_counter) [action, yshift=-15] {is retry counter 0?}; \\
+
+        \node (finish_job) [trait, yshift=-15] {finish\_job()}; &
+        \node (exit_node) [action,  yshift=-20] {exit}; \\
+    };
+
+    \draw [action_step] (wait2) -- (connected2);
+    \draw [action_step] (connected2) -- (prepare2);
+    \draw [action_step] (prepare2) -- node [right] {JobStatus::Finished} (finish_job);
+
+    \draw [action_step] (loop2) -- (connect2);
+    \draw [node_message] (connect2) -- node [above] {NeedsData} (connected2);
+    \draw [action_step] (connect2) -- node [right] {timeout} (retry_counter);
+    \draw [action_step] (retry_counter.east) -- ++(0.5, 0) |- node [right, pos=0.3, text width=2cm] {no, decrement counter} (loop2.east);
+    \draw [action_step] (retry_counter) -- node [right] {yes} (exit_node);
+
+
+
+
+    % Add bottom page border with invisible node
+    \node at (0, -13.0) {};
+
+    % Add left page border with invisible node
+    \node at (-6.9, 0) {};
+
+    \matrix [column sep=10mm, row sep=2.0mm, rectangle, draw=black,
+             column 2/.style={anchor=west}
+        ] at (-3.8, -11.0) {
+        \node (label1a) {}; & \node [font=\small] (label1b) {NCServerMessage}; \\
+        \node (label2a) {}; & \node [font=\small] (label2b) {NCNodeMessage}; \\
+        \node (label3a) {}; & \node [font=\small] (label3b) {state change}; \\
+        \node [action] {foo}; & \node [font=\small] {internal state}; \\
+        \node [trait] {bar()}; & \node [font=\small] {trait method call}; \\
+    };
+
+    \draw [server_message] (label1a) -- (label1b);
+    \draw [node_message] (label2a) -- (label2b);
+    \draw [action_step] (label3a) -- (label3b);
+
+\end{tikzpicture}
+
+\end{document}
