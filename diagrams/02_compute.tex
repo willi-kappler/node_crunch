@@ -37,10 +37,6 @@
         \node (server_process) [trait] {process\_data\_from\_node()}; & \\
     };
 
-    \begin{pgfonlayer}{background}
-        \draw [action_step] (wait.310) to (connected2.50);
-    \end{pgfonlayer}
-
     \draw [action_step] (wait) -- (connected1);
     \draw [action_step] (connected1) -- (prepare);
 
@@ -53,6 +49,9 @@
     \draw [server_message] (prepare) -- node [above] {JobStatus::Unfinished} (node_process);
     \draw [action_step] (prepare.south) |- ++(-3, -0.4) |- (wait.west);
 
+    \begin{pgfonlayer}{background}
+        \draw [action_step] (wait.310) to (connected2.50);
+    \end{pgfonlayer}
 
     \draw [node_message] (connect2) -- node [above] {HasData} (connected2);
     \draw [action_step] (connected2) -- (server_process);
