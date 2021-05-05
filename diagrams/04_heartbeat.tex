@@ -1,0 +1,67 @@
+\documentclass[convert={density=1200}]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, matrix, positioning, automata, backgrounds}
+
+\tikzstyle{server} = [rectangle, rounded corners, text centered, draw=black, fill=green!30, inner sep=5pt]
+\tikzstyle{node} = [rectangle, rounded corners, text centered, draw=black, fill=blue!30, inner sep=5pt]
+\tikzstyle{action} = [rectangle, text centered, draw=black, fill=white, inner sep=5pt]
+\tikzstyle{trait} = [trapezium, text centered, draw=black, fill=yellow!30, inner sep=5pt, text=red!50!black, font=\ttfamily]
+
+\tikzstyle{server_message} = [thick, green!50!black, dashed,->, >=stealth]
+\tikzstyle{node_message} = [thick, blue, dashed, ->, >=stealth]
+\tikzstyle{action_step} = [thick, black, ->, >=stealth]
+
+\begin{document}
+
+\begin{tikzpicture}
+
+    \matrix [column sep = 35mm, row sep = 5mm] {
+        \node (ncserver) [server] {NCServer}; &
+        \node (ncnode) [node] {NCNode}; \\
+
+        \node (wait) [action] {wait for connections}; &
+        \node (loop) [action] {heartbeat loop}; \\
+
+        \node (empty) {}; &
+        \node (sleep) [action] {sleep \ttfamily heartbeat}; \\
+
+        \node (connected1) [action] {new connection}; &
+        \node (connect1) [action] {connect to server}; \\
+
+        \node (check_heartbeat) [action] {heartbeat valid?}; & \\
+        \node (heartbeat_timeout) [trait, yshift=-15] {heartbeat\_timeout()}; & \\
+    };
+
+    \draw [action_step] (wait) -- (connected1);
+    \draw [action_step] (connected1) -- (check_heartbeat);
+    \draw [action_step] (check_heartbeat) -- node [right] {no} (heartbeat_timeout);
+    \draw [action_step] (check_heartbeat.west) |- ++(-1.0, 0) |- node [left, pos=0.3] {yes} (wait.west);
+
+    \draw [action_step] (loop) -- (sleep);
+    \draw [action_step] (sleep) -- (connect1);
+
+    \draw [node_message] (connect1) -- node [above] {HeartBeat} (connected1);
+    \draw [action_step] (connect1.south) |- ++(2.0, -0.5) |- node {} (loop.east);
+
+    % Add bottom page border with invisible node
+    \node at (0, -5.3) {};
+
+    % Add left page border with invisible node
+    \node at (6.2, 0) {};
+
+
+    \matrix [column sep=10mm, row sep=2.0mm, rectangle, draw=black,
+             column 2/.style={anchor=west}
+        ] at (3.0, -3.5) {
+        \node (label2a) {}; & \node [font=\small] (label2b) {NCNodeMessage}; \\
+        \node (label3a) {}; & \node [font=\small] (label3b) {state change}; \\
+        \node [action] {foo}; & \node [font=\small] {internal state}; \\
+        \node [trait] {bar()}; & \node [font=\small] {trait method call}; \\
+    };
+
+    \draw [node_message] (label2a) -- (label2b);
+    \draw [action_step] (label3a) -- (label3b);
+
+\end{tikzpicture}
+
+\end{document}
