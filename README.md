@@ -9,6 +9,10 @@ Allows to distribute computations across several nodes.
   - [Table of contents](#table-of-contents)
   - [Features](#features)
   - [Introduction](#introduction)
+    - [Start of node and server:](#start-of-node-and-server)
+    - [Node receives data from server and does computation, sends results back to server:](#node-receives-data-from-server-and-does-computation-sends-results-back-to-server)
+    - [All computation is done, server will exit:](#all-computation-is-done-server-will-exit)
+    - [Node sends heartbeat message to server:](#node-sends-heartbeat-message-to-server)
   - [Server template](#server-template)
   - [Node template](#node-template)
   - [How to start the application](#how-to-start-the-application)
@@ -33,7 +37,7 @@ Allows to distribute computations across several nodes.
 
 **Note 1:** *It is still in development and the API may change.*
 
-**Note 2:** *The communication between the server and the nodes are not encrypted and there is no authentication, so use this in a trusted environment only!*
+**Note 2:** *The communication between the server and the nodes are not encrypted and there is no authentication, so use this in a trusted environment only!* (The nodes can connect to the server via SSH or VPN for example. You have to set this up accordingly)
 
 ## Introduction
 
@@ -68,19 +72,27 @@ This is reflected in the two traits that must be implemented for Node Crunch to 
 
     2.2 `process_data_from_server()` Here the main processing is done by the node code. This method receives the data that has to be processed and returns the processed data.
 
-<p align="center">
+### Start of node and server:
+
+<p align="left">
     <img src="diagrams/01_start.png" alt="Overview" title="Overview" />
 </p>
 
-<p align="center">
+### Node receives data from server and does computation, sends results back to server:
+
+<p align="left">
     <img src="diagrams/02_compute.png" alt="Overview" title="Overview" />
 </p>
 
-<p align="center">
+### All computation is done, server will exit:
+
+<p align="left">
     <img src="diagrams/03_finish.png" alt="Overview" title="Overview" />
 </p>
 
-<p align="center">
+### Node sends heartbeat message to server:
+
+<p align="left">
     <img src="diagrams/04_heartbeat.png" alt="Overview" title="Overview" />
 </p>
 
