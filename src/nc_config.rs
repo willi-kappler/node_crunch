@@ -4,19 +4,19 @@
 /// This data structure contains the configuration for the server and the node.
 #[derive(Debug, Clone)]
 pub struct NCConfiguration{
-    /// IP address of the server
+    /// IP address of the server, default: 127.0.0.1
     pub address: String,
-    /// Port used by the server
+    /// Port used by the server, default: 9000.
     pub port: u16,
     /// Nodes have to send a heartbeat every n seconds or they will be marked as offline.
     /// (The method [`heartbeat_timeout(node_id)`](crate::nc_server::NCServer::heartbeat_timeout)
-    /// with the corresponding node ID is called).
+    /// with the corresponding node ID is called), default: 5.
     pub heartbeat: u64,
-    /// Nodes will wait n seconds before contacting the server again to prevent a denial of service.
+    /// Nodes will wait n seconds before contacting the server again to prevent a denial of service, default: 60.
     pub delay_request_data: u64,
-    /// Number of times a node should try to contact the server before givin up.
+    /// Number of times a node should try to contact the server before givin up, default: 5.
     pub retry_counter: u64,
-    /// The number of threads in the thread pool
+    /// The number of threads in the thread pool, default: 8.
     pub pool_size: u64,
 }
 
