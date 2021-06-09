@@ -10,6 +10,7 @@
 // - Speed up serde: https://github.com/serde-rs/bytes
 // - Use generic data instead of Vec<u8> ?
 // - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
+// - Maybe use the quick protocoll: https://github.com/cloudflare/quiche
 //
 // Examples to add:
 // - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
