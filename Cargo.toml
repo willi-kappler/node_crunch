@@ -9,6 +9,7 @@ edition = "2018"
 license = "MIT"
 repository = "https://github.com/willi-kappler/node_crunch/"
 documentation = "https://docs.rs/node_crunch"
+exclude = ["examples/*", "diagrams/*"]
 
 [dependencies]
 log = "0.4"
