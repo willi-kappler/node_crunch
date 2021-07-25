@@ -1,5 +1,7 @@
 # Node Crunch
 
+![License](https://img.shields.io/github/license/willi-kappler/node_crunch)
+
 Allows to distribute computations across several nodes.
 (Keywords: numeric computing, scientific computing, HPC)
 
@@ -348,7 +350,7 @@ You may have noticed that the data that is send around is passed as `&[u8]` or `
 
 Other things that need to be done in the next releases:
 
-- Currently the communication between the server and the nodes are not compressed, not encrypted and there is no authentication. Maybe I'll switch to a small web framework that does all this, like [warp](https://github.com/seanmonstar/warp) for example. A web framework may be overkill but it would be very easy to add a nice web GUI for the server.
+- Currently the communication between the server and the nodes are not compressed, not encrypted and there is no authentication. Maybe I'll switch to a small web framework that does all this, like [warp](https://github.com/seanmonstar/warp) for example. A web framework may be overkill but it would be very easy to add a nice web GUI for the server. Also look into the [QUIC](https://github.com/cloudflare/quiche) protocol.
 
 - The crate doesn't use any async code ([tokio](https://github.com/tokio-rs/tokio), [async-std](https://github.com/async-rs/async-std), ...). Computations usually are more CPU bound than IO bound but there are always exceptions to this. So the currently used thread based strategy may be the limiting factor in some cases.
 
@@ -360,8 +362,8 @@ Other things that need to be done in the next releases:
 
 - Where does the name Node Crunch come from ? Compute *node* and number *crunching*.
 - Will you add feature *x* ? It depends, if it makes sense and helps other users as well.
-- Can I use [Rayon](https://github.com/rayon-rs/rayon) and / or GPGPU with Node Crunch ? Yes of course, no problem. Have a look at the mandel2 example which uses Rayon.
-- Can I use my C / C++ / Fortran / ... code with Node Crunch ? In theory yes but you have to do some work, see the Fortran example.
+- Can I use [Rayon](https://github.com/rayon-rs/rayon) and / or GPGPU with Node Crunch ? Yes of course, no problem. Have a look at the mandel2 example which uses Rayon (TODO: add GPU example).
+- Can I use my C / C++ / Fortran / ... code with Node Crunch ? In theory yes but you have to do some work (TODO: add example).
 
 ## License
 
