@@ -6,6 +6,9 @@ description = "A crate for distributed computing"
 keywords = ["distribute", "network", "numeric", "computing", "cluster", "hpc"]
 categories = ["Network programming", "Science"]
 edition = "2018"
+license = "MIT"
+repository = "https://github.com/willi-kappler/node_crunch/"
+documentation = "https://docs.rs/node_crunch"
 
 [dependencies]
 log = "0.4"
