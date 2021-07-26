@@ -1,15 +1,15 @@
 [package]
-name = "node_crunch"
-version = "0.1.0"
 authors = ["Willi Kappler <grandor@gmx.de"]
-description = "A crate for distributed computing"
-keywords = ["distribute", "numeric", "computing", "cluster", "hpc"]
 categories = ["network-programming", "science"]
-edition = "2018"
-license = "MIT"
-repository = "https://github.com/willi-kappler/node_crunch/"
+description = "A crate for distributed computing"
 documentation = "https://docs.rs/node_crunch"
+edition = "2018"
 exclude = ["examples/*", "diagrams/*"]
+keywords = ["distribute", "numeric", "computing", "cluster", "hpc"]
+license = "MIT"
+name = "node_crunch"
+repository = "https://github.com/willi-kappler/node_crunch/"
+version = "0.1.0"
 
 [dependencies]
 log = "0.4"
