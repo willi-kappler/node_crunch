@@ -1,7 +1,7 @@
 # Node Crunch
 
 [![MIT licensed](https://img.shields.io/github/license/willi-kappler/node_crunch)](./LICENSE)
-[![Docs](https://docs.rs/node_crunch/badge.svg?version=0.1.0)](https://docs.rs/node_crunch/0.1.0/node_crunch/index.html)
+[![Docs](https://docs.rs/node_crunch/badge.svg)](https://docs.rs/node_crunch)
 [![Crates.io version](https://img.shields.io/crates/v/node_crunch.svg)](https://crates.io/crates/node_crunch)
 
 Allows to distribute computations across several nodes.
