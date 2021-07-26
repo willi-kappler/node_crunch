@@ -1,9 +1,13 @@
 # Node Crunch
 
-![License](https://img.shields.io/github/license/willi-kappler/node_crunch)
+[![MIT licensed](https://img.shields.io/github/license/willi-kappler/node_crunch)](./LICENSE)
+[![Docs](https://docs.rs/node_crunch/badge.svg?version=0.1.0)](https://docs.rs/node_crunch/0.1.0/node_crunch/index.html)
+[![Crates.io version](https://img.shields.io/crates/v/node_crunch.svg)](https://crates.io/crates/node_crunch)
 
 Allows to distribute computations across several nodes.
 (Keywords: numeric computing, scientific computing, HPC)
+
+Version 0.1 (2021.07.25)
 
 ## Table of contents
 
