@@ -9,6 +9,11 @@ Allows to distribute computations across several nodes.
 
 Version 0.1 (2021.07.25)
 
+```toml
+[dependencies]
+node_crunch = "0.1"
+```
+
 ## Table of contents
 
 - [Node Crunch](#node-crunch)
