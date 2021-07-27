@@ -9,7 +9,7 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-log4rs = "0.11"
+log4rs = "1.0"
 serde = { version = "1", features = ["derive"] }
 structopt = "0.3"
 num = "0.2"
