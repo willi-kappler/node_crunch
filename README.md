@@ -343,10 +343,14 @@ Using the two traits looks complicated at first but there are a couple of exampl
 ### MPI
 
 [MPI](https://www.open-mpi.org/) (Message Passing Interface) is the gold standard for distributed computing. It's battle tested, highly optimized and has support for C, C++ and Fortran. There are also bindings for other programming languages available.
-Node Crunch works mainly with Rust and is still in development. It is possible to call C / C++ / Fortran code, see the Fortran example.
+Node Crunch works mainly with Rust and is still in development. It is possible to call C / C++ / Fortran code (a Fortran example will be added in the future).
 Writing correct code in MPI is difficult and if one of the nodes crash all other nodes (including the main node) will be terminated. Node Crunch on the other hand doesn't care if one of the nodes crash. The heartbeat system detect if one of the nodes is no longer available and the server continues with the other nodes. Rust makes it very easy to write correct code, the user doesn't have to take care of synchronization and other things and can fully concentrate on the computing part.
+
 The number of nodes in MPI is fixed the whole time once the application has started, whereas with Node Crunch you can add more and more nodes while it's running if needed.
-Using MPI you are limited what kind of CPU / architecture / operating system you use when you want to run your application on a cluster. With Node Crunch you can mix different OS, CPUs and job scheduler as needed. You just have to compile the node code for each OS / hardware you want tu use.
+Using MPI you are limited what kind of CPU / architecture / operating system you use when you want to run your application on a cluster. With Node Crunch you can mix different OS, CPUs and job scheduler as needed. You just have to compile the node code for each OS / hardware you want to use.
+
+Another advantage of MPI is that memory can also be distributed across nodes. So of the data is too big to fit into the memory of one node it can be split up.
+This can also be done with Node Crunch, since it doesn't need any specific memory layout. In the mandel example all the data is stored on the server using the array2d helper structure. But the server could just pass a file name and an offset + size to each node and then the nodes would read in that huge file at that offset (which is different for each node) and just send the results back to the server (or write them to disk directly and let the server know the chunk of file was processed successfully). (An example to show how this is done needs to be provided)
 
 ### BOINC
 
