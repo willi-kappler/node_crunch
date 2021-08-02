@@ -9,7 +9,7 @@ use rand::random;
 use serde::{Serialize, Deserialize};
 
 /// New type pattern for the node id.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeID(u64);
 
 /// This data structure contains the node id and the time stamps for the heartbeat.
