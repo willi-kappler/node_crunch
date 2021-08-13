@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
+use std::collections::HashMap;
 
 use log::{error, info, debug};
 use serde::{Serialize, Deserialize};
@@ -33,6 +34,8 @@ pub(crate) enum NCServerMessage {
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus),
+    /// Send a command to one or all nodes.
+    Command(String),
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
@@ -143,8 +146,6 @@ impl NCServerStarter {
         let socket_addr = SocketAddr::new(ip_addr, server_process.port);
         let listener = TcpListener::bind(socket_addr).unwrap();
 
-        let job_done = server_process.clone_job_done();
-
         let server_process = Arc::new(server_process);
 
         loop {
@@ -158,7 +159,7 @@ impl NCServerStarter {
                 }
             }
 
-            if job_done.load(Ordering::Relaxed) {
+            if server_process.is_job_done() {
                 // Try to exit main loop as soon as possible.
                 // Don't bother with informing the nodes since they have a retry counter for IO errors
                 // and will exit when the counter reaches zero.
@@ -234,7 +235,9 @@ struct ServerProcess<T> {
     /// Internal list of all the registered nodes.
     node_list: Mutex<NCNodeList>,
     /// Indicates if the job is already done and the server can exit its main loop.
-    job_done: Arc<AtomicBool>,
+    job_done: AtomicBool,
+    /// A mailbox for each node, contains special commands that should be sent to the nodes.
+    mailbox: Mutex<HashMap<NodeID, Vec<String>>>,
 }
 
 impl<T: NCServer> ServerProcess<T> {
@@ -247,15 +250,16 @@ impl<T: NCServer> ServerProcess<T> {
             heartbeat: config.heartbeat,
             nc_server: Mutex::new(nc_server),
             node_list: Mutex::new(NCNodeList::new()),
-            job_done: Arc::new(AtomicBool::new(false)),
+            job_done: AtomicBool::new(false),
+            mailbox: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Clones the job_done AtomicBool and returns it
-    fn clone_job_done(&self) -> Arc<AtomicBool> {
-        debug!("ServerProcess::clone_job_done()");
+    /// Returns true if the job is finished
+    fn is_job_done(&self) -> bool {
+        debug!("ServerProcess::is_job_done()");
 
-        self.job_done.clone()
+        self.job_done.load(Ordering::Relaxed)
     }
 
     /// All the message that were sent from a node are handled here. It can be on of these types:
@@ -283,12 +287,22 @@ impl<T: NCServer> ServerProcess<T> {
             }
             NCNodeMessage::NeedsData(node_id) => {
                 debug!("Node {} needs data to process", node_id);
+
+                let mut mailbox = self.mailbox.lock()?;
+                let mailbox = mailbox.get_mut(&node_id);
+                if let Some(commands) = mailbox {
+                    let command = commands.pop();
+                    if let Some(command) = command {
+                        return self.send_command(command, stream)
+                    }
+                }
+
                 let data_for_node = self.nc_server.lock()?.prepare_data_for_node(node_id)?;
 
                 match data_for_node {
                     NCJobStatus::Unfinished(data) => {
                         debug!("Send data to node");
-                        self.send_job_status_unfinished_message(data, stream)?;
+                        self.send_job_status_unfinished(data, stream)?;
                     }
                     NCJobStatus::Waiting => {
                         debug!("Waiting for other nodes to finish");
@@ -330,7 +344,7 @@ impl<T: NCServer> ServerProcess<T> {
     }
 
     /// Sends the NCServerMessage::JobStatus Unfinished message with the given data to the node,
-    fn send_job_status_unfinished_message(&self, data: Vec<u8>, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_job_status_unfinished(&self, data: Vec<u8>, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_job_status_unfinished_message()");
 
         nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Unfinished(data)), &mut stream)
@@ -341,5 +355,10 @@ impl<T: NCServer> ServerProcess<T> {
         debug!("ServerProcess::send_job_status_waiting()");
 
         nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)
+    }
+    /// Send the NCServerMessage::Command message to the node.
+    fn send_command(&self, command: String, mut stream: TcpStream) -> Result<(), NCError> {
+        debug!("ServerProcess::send_command()");
+        nc_send_data2(&NCServerMessage::Command(command), &mut stream)
     }
 }

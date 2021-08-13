@@ -54,6 +54,12 @@ pub trait NCNode {
     /// Note that you have to use the nc_decode_data() or nc_decode_data2() helper methods from the nc_utils module in order to
     /// deserialize the data.
     fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError>;
+
+    /// The server has send a special user defined command to the node.
+    /// Usually this is not needed, only for debug purposes or if s.th. special has happened (user interaction for example)
+    fn process_command(&mut self, command: &str) {
+        debug!("Got a command from server: {}", command);
+    }
 }
 
 /// Main data structure for managing and starting the computation on the nodes.
@@ -126,7 +132,8 @@ self.config.delay_request_data, self.config.retry_counter);
     }
 
     /// Here is main loop for this node. It keeps requesting and processing data until the server
-    /// sends a NCJobStatus::Finished message to this node.
+    /// is finished. There will be no finish message from the server and the node will just run into
+    /// a timeout and exit.
     /// If there is an error this node will wait n seconds before it tries to reconnect to the server.
     /// The delay time can be configured in the NCConfiguration data structure.
     /// With every error the retry counter is decremented. If it reaches zero the node will give up and exit.
@@ -289,31 +296,48 @@ impl<T: NCNode> NodeProcess<T> {
 
         let new_data = self.send_needs_data_message()?;
 
-        if let NCServerMessage::JobStatus(job_status) = new_data {
-            match job_status {
-                NCJobStatus::Unfinished(data) => {
-                    self.process_data_and_send_has_data_message(&data)
-                }
-                NCJobStatus::Waiting => {
-                    // The node will not exit here since the job is not 100% done.
-                    // This just means that all the remaining work has already
-                    // been distributed among all nodes.
-                    // One of the nodes can still crash and thus free nodes have to ask the server for more work
-                    // from time to time (delay_request_data).
+        match new_data {
+            NCServerMessage::JobStatus(job_status) => {
+                match job_status {
+                    NCJobStatus::Unfinished(data) => {
+                        self.process_data_and_send_has_data_message(&data)
+                    }
+                    NCJobStatus::Waiting => {
+                        // The node will not exit here since the job is not 100% done.
+                        // This just means that all the remaining work has already
+                        // been distributed among all nodes.
+                        // One of the nodes can still crash and thus free nodes have to ask the server for more work
+                        // from time to time (delay_request_data).
 
-                    debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", self.get_delay());
-                    self.sleep();
-                    Ok(())
-                }
-                msg => {
-                    // The server does not bother sending the node a NCJobStatus::Finished message.
-                    error!("Error: unexpected message from server: {:?}", msg);
-                    Err(NCError::ServerMsgMismatch)
+                        debug!("Waiting for other nodes to finish (delay_request_data: {} sec)...", self.get_delay());
+                        self.sleep();
+                        Ok(())
+                    }
+                    msg => {
+                        // The server does not bother sending the node a NCJobStatus::Finished message.
+                        error!("Error: unexpected message from server: {:?}", msg);
+                        Err(NCError::ServerMsgMismatch)
+                    }
                 }
             }
-        } else {
-            error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch, expected: JobStatus, got: {:?}", new_data);
-            Err(NCError::ServerMsgMismatch)
+            NCServerMessage::Command(command) => {
+                if command.starts_with("new_server") {
+                    // TODO: connect to an alternative server from now on
+                    todo!();
+                } else if command.starts_with("quit") {
+                    // TODO: quit immediately
+                    todo!();
+                } else {
+                    // Forward command to user code
+                    self.nc_node.process_command(&command);
+                }
+
+                Ok(())
+            }
+            _ => {
+                error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch, got: {:?}", new_data);
+                Err(NCError::ServerMsgMismatch)
+            }
         }
     }
 
