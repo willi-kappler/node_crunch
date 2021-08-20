@@ -3,7 +3,7 @@
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
 use std::time::Instant;
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 
 use rand::random;
 use serde::{Serialize, Deserialize};
@@ -38,8 +38,8 @@ impl NodeID {
     }
 }
 
-impl fmt::Display for NodeID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for NodeID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
