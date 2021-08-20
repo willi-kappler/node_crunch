@@ -1,6 +1,7 @@
 //! This module contains the configuration for the server and the nodes.
 //! Usually code for the server and the node is shared.
 
+use std::fmt::{self, Display, Formatter};
 /// This data structure contains the configuration for the server and the node.
 #[derive(Debug, Clone)]
 pub struct NCConfiguration{
@@ -30,5 +31,12 @@ impl Default for NCConfiguration {
             retry_counter: 5,
             pool_size: 8
         }
+    }
+}
+
+impl Display for NCConfiguration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "address: '{}', port: '{}', heartbeat: '{}'\ndelay request data: '{}', retry counter: '{}', pool size: '{}'",
+            self.address, self.port, self.heartbeat, self.delay_request_data, self.retry_counter, self.pool_size)
     }
 }
