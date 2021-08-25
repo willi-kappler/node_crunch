@@ -11,6 +11,8 @@
 // - Use generic data instead of Vec<u8> ?
 // - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
 // - Also have a look into QUIC (https://github.com/cloudflare/quiche)
+// - Strobe looks interesting: https://github.com/rozbb/strobe-rs
+// - Compression: https://github.com/BurntSushi/rust-snappy or https://github.com/pseitz/lz4_flex
 //
 // Examples to add:
 // - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
