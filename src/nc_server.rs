@@ -27,13 +27,13 @@ use crate::nc_util::{nc_receive_data, nc_send_data, nc_send_data2};
 
 /// This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NCServerMessage {
+pub(crate) enum NCServerMessage<InitialData, NewData> {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
     /// and sends some optional initial data to the node.
-    InitialData(NodeID, Option<Vec<u8>>),
+    InitialData(NodeID, Option<InitialData>),
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
-    JobStatus(NCJobStatus),
+    JobStatus(NCJobStatus<NewData>),
     /// Send a command to one or all nodes.
     Command(String),
 }
@@ -41,9 +41,9 @@ pub(crate) enum NCServerMessage {
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
 /// a node request new data via the NCNodeMessage::NeedsData message.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum NCJobStatus {
+pub enum NCJobStatus<NewData> {
     /// The job is not done yet and the node has to process the data the server sends to it.
-    Unfinished(Vec<u8>),
+    Unfinished(NewData),
     /// The server is still waiting for other nodes to finish the job. This means that all the work has already been distributed to all the nodes
     /// and the server sends this message to the remaining nodes. It does this because some of the processing nodes can still crash, so that its work
     /// has to be done by a waiting node.
@@ -55,9 +55,13 @@ pub enum NCJobStatus {
 // TODO: Generic trait, U for data in, V for data out
 /// This is the trait that you have to implement in order to start the server.
 pub trait NCServer {
+    type InitialData;
+    type NewData;
+    type ProcessedData;
+
     /// This method is called once for every new node that registers with the server using the NCNodeMessage::Register message.
     /// It may prepare some initial data that is common for all nodes at the beginning of the job.
-    fn initial_data(&mut self) -> Result<Option<Vec<u8>>, NCError> {
+    fn initial_data(&mut self) -> Result<Option<Self::InitialData>, NCError> {
         Ok(None)
     }
     /// This method is called when the node requests new data with the NCNodeMessage::NeedsData message.
@@ -66,10 +70,10 @@ pub trait NCServer {
     /// Usually the server will have an internal data structure containing all the registered nodes.
     /// According to the status of the job this method returns a NCJobStatus value:
     /// Unfinished, Waiting or Finished.
-    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError>;
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewData>, NCError>;
     /// When one node is done processing the data from the server it will send the result back to the server and then this method is called.
     /// For example a small piece of a 2D array may be returned by the node and the server puts the resulting data back into the big 2D array.
-    fn process_data_from_node(&mut self, node_id: NodeID, data: &[u8]) -> Result<(), NCError>;
+    fn process_data_from_node(&mut self, node_id: NodeID, data: &Self::ProcessedData) -> Result<(), NCError>;
     /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heartbeat value in the NCConfiguration)
     /// then this method is called with the corresponding node id and the node should be marked as offline in this method.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>);
@@ -331,6 +335,15 @@ impl<T: NCServer> ServerProcess<T> {
                 // with those nodes to react accordingly.
                 let nodes = self.node_list.lock()?.check_heartbeat(self.heartbeat).collect::<Vec<NodeID>>();
                 self.nc_server.lock()?.heartbeat_timeout(nodes);
+            }
+            NCNodeMessage::GetStatistics => {
+
+            }
+            NCNodeMessage::ShutDown => {
+
+            }
+            NCNodeMessage::MoveServer(destination) => {
+                
             }
         }
         Ok(())
