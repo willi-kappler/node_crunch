@@ -1,8 +1,7 @@
 use log::{info, error};
 use num::complex::Complex64;
 
-use node_crunch::{NCNode, NCError, NCConfiguration, Array2D,
-    NCNodeStarter, nc_decode_data, nc_encode_data};
+use node_crunch::{NCNode, NCError, NCConfiguration, Array2D, NCNodeStarter};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -11,25 +10,29 @@ struct MandelNode {
 }
 
 impl NCNode for MandelNode {
+    type InitialData = ();
+    type NewData = ServerData;
+    type ProcessedData = NodeData;
+    type ServerCommand = ();
+
     /// This processes the data that has been send from the server to this node.
-    /// In here the whole number crunshing is happending in this example the mandelbrot set.
+    /// In here the whole number crunching is happening in this example the mandelbrot set.
     /// The result is returned in a Ok(Vec<u8>).
     /// Return an error otherwise.
-    fn process_data_from_server(&mut self, data: &[u8]) -> Result<Vec<u8>, NCError> {
-        let input: ServerData = nc_decode_data(&data)?;
-        let mut array2d = Array2D::<u32>::new(input.width, input.height, 0);
+    fn process_data_from_server(&mut self, data: &Self::NewData) -> Result<Self::ProcessedData, NCError> {
+        let mut array2d = Array2D::<u32>::new(data.width, data.height, 0);
         let mut c: Complex64;
         let mut z: Complex64;
         let mut iter: u32;
 
-        for x in 0..input.width {
-            for y in 0..input.height {
+        for x in 0..data.width {
+            for y in 0..data.height {
                 iter = 0;
-                let re = input.re + (((x + input.x) as f64) * input.x_step);
-                let im = input.im + (((y + input.y) as f64) * input.y_step);
+                let re = data.re + (((x + data.x) as f64) * data.x_step);
+                let im = data.im + (((y + data.y) as f64) * data.y_step);
                 c = Complex64 { re, im };
                 z = c;
-                while (z.norm_sqr() <= 4.0) && (iter < input.max_iter) {
+                while (z.norm_sqr() <= 4.0) && (iter < data.max_iter) {
                     z = c + (z * z);
                     iter = iter + 1;
                 }
@@ -37,7 +40,7 @@ impl NCNode for MandelNode {
             }
         }
 
-        let result = nc_encode_data(&NodeData { chunk_id: input.chunk_id, source: array2d })?;
+        let result = NodeData { chunk_id: data.chunk_id, source: array2d };
         Ok(result)
     }
 }

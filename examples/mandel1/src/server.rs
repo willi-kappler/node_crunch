@@ -3,8 +3,7 @@ use num::complex::Complex64;
 use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
-    Array2DChunk, ChunkList, NodeID,
-    NCServerStarter, nc_decode_data, nc_encode_data};
+    Array2DChunk, ChunkList, NodeID, NCServerStarter};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
 
@@ -69,10 +68,15 @@ impl MandelServer {
 }
 
 impl NCServer for MandelServer {
+    type InitialData = ();
+    type NewData = ServerData;
+    type ProcessedData = NodeData;
+    type ServerCommand = ();
+
     /// Every node needs some data to process. Here this data is prepared for each node and some book keeping is saved in the chunks list.
     /// The whole mandelbrot image is split up into equally sized pieces and processed separately.
     /// Returns the NCJobStatus that is checked by the server.
-    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError> {
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewData>, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         if let Some((i, free_chunk)) = self.chunk_list.get_next_free_chunk() {
@@ -89,17 +93,9 @@ impl NCServer for MandelServer {
                 im: self.start.im,
             };
 
-            match nc_encode_data(&data_for_node) {
-                Ok(data) => {
-                    free_chunk.set_processing(node_id);
-                    debug!("preparing chunk {} for node {}", i, node_id);
-                    Ok(NCJobStatus::Unfinished(data))
-                }
-                Err(e) => {
-                    error!("An error occurred while preparing the data for the Node: {}, error: {}", node_id, e);
-                    Err(e)
-                }
-            }
+            free_chunk.set_processing(node_id);
+            debug!("preparing chunk {} for node {}", i, node_id);
+            Ok(NCJobStatus::Unfinished(data_for_node))
         } else {
             if self.is_job_done() {
                 Ok(NCJobStatus::Finished)
@@ -110,27 +106,19 @@ impl NCServer for MandelServer {
     }
 
     /// If one of the nodes has finished processing the small chunk the server writes the data back to the whole image Array2D.
-    fn process_data_from_node(&mut self, node_id: NodeID, node_data: &[u8]) -> Result<(), NCError> {
+    fn process_data_from_node(&mut self, node_id: NodeID, node_data: &Self::ProcessedData) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
-        match nc_decode_data::<NodeData>(node_data) {
-            Ok(node_data) => {
-                let chunk_id = node_data.chunk_id;
-                let source = node_data.source;
-                let current_chunk = &mut self.chunk_list.get(chunk_id as usize);
+        let chunk_id = node_data.chunk_id;
+        let source = &node_data.source;
+        let current_chunk = &mut self.chunk_list.get(chunk_id as usize);
 
-                if current_chunk.is_processing(node_id) {
-                    current_chunk.set_finished();
-                    self.array2d_chunk.set_chunk(chunk_id, &source)
-                } else {
-                    error!("Mismatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
-                    Err(NCError::NodeIDMismatch(node_id, current_chunk.node_id))
-                }
-            },
-            Err(e) => {
-                error!("An error occurred while processing the data from the Node: {}", e);
-                Err(e)
-            }
+        if current_chunk.is_processing(node_id) {
+            current_chunk.set_finished();
+            self.array2d_chunk.set_chunk(chunk_id, &source)
+        } else {
+            error!("Mismatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
+            Err(NCError::NodeIDMismatch(node_id, current_chunk.node_id))
         }
     }
 
