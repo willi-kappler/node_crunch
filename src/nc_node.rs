@@ -7,8 +7,7 @@ use std::{thread, time::Duration};
 use std::thread::{spawn, JoinHandle};
 
 use log::{error, info, debug};
-use serde::de::DeserializeOwned;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
@@ -45,10 +44,10 @@ pub(crate) enum NCNodeMessage<ProcessedData> {
 // TODO: Generic trait, U for data in, V for data out
 /// This trait has to be implemented for the code that runs on all the nodes.
 pub trait NCNode {
-    type InitialData;
-    type NewData;
-    type ProcessedData;
-    type ServerCommand;
+    type InitialData: Serialize + DeserializeOwned;
+    type NewData: Serialize + DeserializeOwned;
+    type ProcessedData: Serialize + DeserializeOwned;
+    type ServerCommand: Serialize + DeserializeOwned;
 
     /// Once this node has sent a NCNodeMessage::Register message the server responds with a NCServerMessage::InitialData message.
     /// Then this method is called with the data received from the server.
@@ -72,7 +71,7 @@ pub trait NCNode {
 
     /// The server has send a special user defined command to the node.
     /// Usually this is not needed, only for debug purposes or if s.th. special has happened (user interaction for example)
-    fn process_command(&mut self, command: &Self::ServerCommand) {
+    fn process_command(&mut self, _command: &Self::ServerCommand) {
         // debug!("Got a command from server: {:?}", command);
     }
 }
@@ -214,8 +213,9 @@ impl NodeHeartbeat {
     /// Send the NCNodeMessage::HeartBeat message to the server.
     fn send_heartbeat_message(&self) -> Result<(), NCError> {
         debug!("NodeHeartbeat::send_heartbeat_message()");
+        let message: NCNodeMessage<()> = NCNodeMessage::HeartBeat(self.node_id);
 
-        nc_send_data(&NCNodeMessage::HeartBeat(self.node_id), &self.server_addr)
+        nc_send_data(&message, &self.server_addr)
     }
 
     /// Returns the current value of the retry counter.
@@ -274,10 +274,10 @@ impl<T: NCNode> NodeProcess<T> {
     /// It sends a NCNodeMessage::Register message to the server and expects a NCServerMessage::InitialData message from the server.
     /// On success it sets the new assigned node id for this node and calls the NCNode trait method set_initial_data().
     /// If the server doesn't respond with a NCServerMessage::InitialData message a NCError::ServerMsgMismatch error is returned.
-    fn get_initial_data<InitialData, NewData>(&mut self) -> Result<(), NCError> {
+    fn get_initial_data(&mut self) -> Result<(), NCError> {
         debug!("NodeProcess::get_initial_data()");
 
-        let initial_data: NCServerMessage<InitialData, NewData> = self.send_register_message()?;
+        let initial_data: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = self.send_register_message()?;
 
         match initial_data {
             NCServerMessage::InitialData(node_id, initial_data) => {
@@ -285,7 +285,7 @@ impl<T: NCNode> NodeProcess<T> {
                 self.node_id = node_id;
                 self.nc_node.set_initial_data(node_id, initial_data)
             }
-            msg => {
+            _msg => {
                 error!("Error in get_initial_data(), NCServerMessage mismatch, expected: InitialData");
                 Err(NCError::ServerMsgMismatch)
             }
@@ -293,10 +293,11 @@ impl<T: NCNode> NodeProcess<T> {
     }
 
     /// Send the NCNodeMessage::Register message to the server.
-    fn send_register_message<InitialData: DeserializeOwned, NewData>(&self) -> Result<NCServerMessage<InitialData, NewData>, NCError> {
+    fn send_register_message(&self) -> Result<NCServerMessage<T::InitialData, T::NewData, T::ServerCommand>, NCError> {
         debug!("NodeProcess::send_register_message()");
+        let message: NCNodeMessage<T::ProcessedData> = NCNodeMessage::Register;
 
-        nc_send_receive_data(&NCNodeMessage::Register, &self.server_addr)
+        nc_send_receive_data(&message, &self.server_addr)
     }
 
     /// This method sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
@@ -309,7 +310,7 @@ impl<T: NCNode> NodeProcess<T> {
     fn get_and_process_data(&mut self) -> Result<(), NCError> {
         debug!("NodeProcess::get_and_process_data()");
 
-        let new_data = self.send_needs_data_message()?;
+        let new_data: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = self.send_needs_data_message()?;
 
         match new_data {
             NCServerMessage::JobStatus(job_status) => {
@@ -328,9 +329,9 @@ impl<T: NCNode> NodeProcess<T> {
                         self.sleep();
                         Ok(())
                     }
-                    msg => {
+                    _msg => {
                         // The server does not bother sending the node a NCJobStatus::Finished message.
-                        error!("Error: unexpected message from server: {:?}", msg);
+                        error!("Error: unexpected message from server");
                         Err(NCError::ServerMsgMismatch)
                     }
                 }
@@ -341,22 +342,23 @@ impl<T: NCNode> NodeProcess<T> {
                 Ok(())
             }
             _ => {
-                error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch, got: {:?}", new_data);
+                error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch");
                 Err(NCError::ServerMsgMismatch)
             }
         }
     }
 
     /// Send the NCNodeMessage::NeedsData message to the server.
-    fn send_needs_data_message<InitialData, NewData>(&self) -> Result<NCServerMessage<InitialData, NewData>, NCError> {
+    fn send_needs_data_message(&self) -> Result<NCServerMessage<T::InitialData, T::NewData, T::ServerCommand>, NCError> {
         debug!("NodeProcess::send_needs_data_message()");
+        let message: NCNodeMessage<T::ProcessedData> = NCNodeMessage::NeedsData(self.node_id);
 
-        nc_send_receive_data(&NCNodeMessage::NeedsData(self.node_id), &self.server_addr)
+        nc_send_receive_data(&message, &self.server_addr)
     }
 
     /// Process the new data from the server and sends the result back to the server using
     /// the NCNodeMessage::HasData message.
-    fn process_data_and_send_has_data_message(&mut self, data: &[u8]) -> Result<(), NCError> {
+    fn process_data_and_send_has_data_message(&mut self, data: &T::NewData) -> Result<(), NCError> {
         debug!("NodeProcess::process_data_and_send_has_data_message()");
 
         let result = self.nc_node.process_data_from_server(data)?;
@@ -451,8 +453,13 @@ mod tests {
     struct TestNode;
 
     impl NCNode for TestNode {
-        fn process_data_from_server(&mut self, _data: &[u8]) -> Result<Vec<u8>, NCError> {
-            Ok(Vec::new())
+        type InitialData = ();
+        type NewData = ();
+        type ProcessedData = ();
+        type ServerCommand = ();
+
+        fn process_data_from_server(&mut self, _data: &()) -> Result<(), NCError> {
+            Ok(())
         }
     }
 

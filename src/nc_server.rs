@@ -16,7 +16,7 @@ use std::time::{Instant, Duration};
 use std::collections::HashMap;
 
 use log::{error, info, debug};
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use threadpool::ThreadPool;
 
 use crate::nc_error::NCError;
@@ -27,7 +27,7 @@ use crate::nc_util::{nc_receive_data, nc_send_data, nc_send_data2};
 
 /// This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NCServerMessage<InitialData, NewData> {
+pub(crate) enum NCServerMessage<InitialData, NewData, ServerCommand> {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
     /// and sends some optional initial data to the node.
     InitialData(NodeID, Option<InitialData>),
@@ -35,7 +35,7 @@ pub(crate) enum NCServerMessage<InitialData, NewData> {
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus<NewData>),
     /// Send a command to one or all nodes.
-    Command(String),
+    Command(ServerCommand),
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
@@ -55,9 +55,10 @@ pub enum NCJobStatus<NewData> {
 // TODO: Generic trait, U for data in, V for data out
 /// This is the trait that you have to implement in order to start the server.
 pub trait NCServer {
-    type InitialData;
-    type NewData;
-    type ProcessedData;
+    type InitialData: Serialize + DeserializeOwned;
+    type NewData: Serialize + DeserializeOwned;
+    type ProcessedData: Serialize + DeserializeOwned;
+    type ServerCommand: Serialize + DeserializeOwned + Send;
 
     /// This method is called once for every new node that registers with the server using the NCNodeMessage::Register message.
     /// It may prepare some initial data that is common for all nodes at the beginning of the job.
@@ -143,7 +144,7 @@ impl NCServerStarter {
     /// In here the main loop and the tcp server are started.
     /// For every node connection the method start_node_thread() is called, which handles the node request in a separate thread.
     /// If the job is done one the main loop will exited
-    fn start_main_loop<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, server_process: ServerProcess<T>) {
+    fn start_main_loop<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, server_process: ServerProcess<T, T::ServerCommand>) {
         debug!("NCServerStarter::start_main_loop()");
 
         let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable ?
@@ -177,7 +178,7 @@ impl NCServerStarter {
         server_process.nc_server.lock().unwrap().finish_job();
     }
     /// This starts a new thread for each node that sends a message to the server and calls the handle_node() method in that thread.
-    fn start_node_thread<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, stream: TcpStream, server_process: Arc<ServerProcess<T>>) {
+    fn start_node_thread<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, stream: TcpStream, server_process: Arc<ServerProcess<T, T::ServerCommand>>) {
         debug!("NCServerStarter::start_node_thread()");
 
         thread_pool.execute(move || {
@@ -223,13 +224,14 @@ impl ServerHeartbeat {
     /// can check all the registered nodes.
     fn send_check_heartbeat_message(&self) -> Result<(), NCError> {
         debug!("ServerHeartbeat::send_check_heartbeat_message()");
+        let message: NCNodeMessage<()> = NCNodeMessage::CheckHeartbeat;
 
-        nc_send_data(&NCNodeMessage::CheckHeartbeat, &self.server_socket)
+        nc_send_data(&message, &self.server_socket)
     }
 }
 
 /// In here the server handles all the messages and generates appropriate responses.
-struct ServerProcess<T> {
+struct ServerProcess<T, U> {
     /// The port the server will listen to.
     port: u16,
     /// Every n seconds a heartbeat message is sent from the node to the server.
@@ -241,10 +243,10 @@ struct ServerProcess<T> {
     /// Indicates if the job is already done and the server can exit its main loop.
     job_done: AtomicBool,
     /// A mailbox for each node, contains special commands that should be sent to the nodes.
-    mailbox: Mutex<HashMap<NodeID, Vec<String>>>,
+    mailbox: Mutex<HashMap<NodeID, Vec<U>>>,
 }
 
-impl<T: NCServer> ServerProcess<T> {
+impl<T: NCServer> ServerProcess<T, T::ServerCommand> {
     /// Creates a new ServerProcess with the given user defined nc_server that implements the NCServer trait
     fn new(config: &NCConfiguration, nc_server: T) -> Self {
         debug!("ServerProcess::new()");
@@ -280,7 +282,7 @@ impl<T: NCServer> ServerProcess<T> {
     fn handle_node(&self, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::handle_node()");
 
-        let request: NCNodeMessage = nc_receive_data(&mut stream)?;
+        let request: NCNodeMessage<T::ProcessedData> = nc_receive_data(&mut stream)?;
 
         match request {
             NCNodeMessage::Register => {
@@ -342,36 +344,41 @@ impl<T: NCServer> ServerProcess<T> {
             NCNodeMessage::ShutDown => {
 
             }
-            NCNodeMessage::MoveServer(destination) => {
-                
+            NCNodeMessage::MoveServer(_destination) => {
+
             }
         }
         Ok(())
     }
 
     /// Sends the NCServerMessage::InitialData message to the node with the given node_id and optional initial_data
-    fn send_initial_data_message(&self, node_id: NodeID, initial_data: Option<Vec<u8>>, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_initial_data_message(&self, node_id: NodeID, initial_data: Option<T::InitialData>, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_initial_data_message()");
+        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::InitialData(node_id, initial_data);
 
-        nc_send_data2(&NCServerMessage::InitialData(node_id, initial_data), &mut stream)
+        nc_send_data2(&message, &mut stream)
     }
 
     /// Sends the NCServerMessage::JobStatus Unfinished message with the given data to the node,
-    fn send_job_status_unfinished(&self, data: Vec<u8>, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_job_status_unfinished(&self, data: T::NewData, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_job_status_unfinished_message()");
+        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::JobStatus(NCJobStatus::Unfinished(data));
 
-        nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Unfinished(data)), &mut stream)
+        nc_send_data2(&message, &mut stream)
     }
 
     /// Send the NCServerMessage::JobStatus Waiting message to the node.
     fn send_job_status_waiting(&self, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_job_status_waiting()");
+        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::JobStatus(NCJobStatus::Waiting);
 
-        nc_send_data2(&NCServerMessage::JobStatus(NCJobStatus::Waiting), &mut stream)
+        nc_send_data2(&message, &mut stream)
     }
     /// Send the NCServerMessage::Command message to the node.
-    fn send_command(&self, command: String, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_command(&self, command: T::ServerCommand, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_command()");
-        nc_send_data2(&NCServerMessage::Command(command), &mut stream)
+        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::Command(command);
+
+        nc_send_data2(&message, &mut stream)
     }
 }
