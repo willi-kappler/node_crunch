@@ -8,7 +8,6 @@
 // - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
 // - Add authentication ?
 // - Speed up serde: https://github.com/serde-rs/bytes
-// - Use generic data instead of Vec<u8> ?
 // - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
 // - Also have a look into QUIC (https://github.com/cloudflare/quiche)
 // - Strobe looks interesting: https://github.com/rozbb/strobe-rs

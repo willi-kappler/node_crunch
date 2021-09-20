@@ -10,16 +10,16 @@ struct MandelNode {
 }
 
 impl NCNode for MandelNode {
-    type InitialData = ();
-    type NewData = ServerData;
-    type ProcessedData = NodeData;
-    type ServerCommand = ();
+    type InitialDataT = ();
+    type NewDataT = ServerData;
+    type ProcessedDataT = NodeData;
+    type CustomMessageT = ();
 
     /// This processes the data that has been send from the server to this node.
     /// In here the whole number crunching is happening in this example the mandelbrot set.
     /// The result is returned in a Ok(Vec<u8>).
     /// Return an error otherwise.
-    fn process_data_from_server(&mut self, data: &Self::NewData) -> Result<Self::ProcessedData, NCError> {
+    fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError> {
         let mut array2d = Array2D::<u32>::new(data.width, data.height, 0);
         let mut c: Complex64;
         let mut z: Complex64;

@@ -27,23 +27,23 @@ use crate::nc_util::{nc_receive_data, nc_send_data, nc_send_data2};
 
 /// This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NCServerMessage<InitialData, NewData, ServerCommand> {
+pub(crate) enum NCServerMessage<InitialDataT, NewDataT, CustomMessageT> {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
     /// and sends some optional initial data to the node.
-    InitialData(NodeID, Option<InitialData>),
+    InitialData(NodeID, Option<InitialDataT>),
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
-    JobStatus(NCJobStatus<NewData>),
-    /// Send a command to one or all nodes.
-    Command(ServerCommand),
+    JobStatus(NCJobStatus<NewDataT>),
+    /// Send a custom message to one or all nodes.
+    CustomMessage(CustomMessageT),
 }
 
 /// The job status tells the node what to do next: process the new data, wait for other nodes to finish or exit. This is the answer from the server when
 /// a node request new data via the NCNodeMessage::NeedsData message.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum NCJobStatus<NewData> {
+pub enum NCJobStatus<NewDataT> {
     /// The job is not done yet and the node has to process the data the server sends to it.
-    Unfinished(NewData),
+    Unfinished(NewDataT),
     /// The server is still waiting for other nodes to finish the job. This means that all the work has already been distributed to all the nodes
     /// and the server sends this message to the remaining nodes. It does this because some of the processing nodes can still crash, so that its work
     /// has to be done by a waiting node.
@@ -55,14 +55,14 @@ pub enum NCJobStatus<NewData> {
 // TODO: Generic trait, U for data in, V for data out
 /// This is the trait that you have to implement in order to start the server.
 pub trait NCServer {
-    type InitialData: Serialize + DeserializeOwned;
-    type NewData: Serialize + DeserializeOwned;
-    type ProcessedData: Serialize + DeserializeOwned;
-    type ServerCommand: Serialize + DeserializeOwned + Send;
+    type InitialDataT: Serialize + DeserializeOwned;
+    type NewDataT: Serialize + DeserializeOwned;
+    type ProcessedDataT: Serialize + DeserializeOwned;
+    type CustomMessageT: Serialize + DeserializeOwned + Send;
 
     /// This method is called once for every new node that registers with the server using the NCNodeMessage::Register message.
     /// It may prepare some initial data that is common for all nodes at the beginning of the job.
-    fn initial_data(&mut self) -> Result<Option<Self::InitialData>, NCError> {
+    fn initial_data(&mut self) -> Result<Option<Self::InitialDataT>, NCError> {
         Ok(None)
     }
     /// This method is called when the node requests new data with the NCNodeMessage::NeedsData message.
@@ -71,10 +71,10 @@ pub trait NCServer {
     /// Usually the server will have an internal data structure containing all the registered nodes.
     /// According to the status of the job this method returns a NCJobStatus value:
     /// Unfinished, Waiting or Finished.
-    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewData>, NCError>;
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewDataT>, NCError>;
     /// When one node is done processing the data from the server it will send the result back to the server and then this method is called.
     /// For example a small piece of a 2D array may be returned by the node and the server puts the resulting data back into the big 2D array.
-    fn process_data_from_node(&mut self, node_id: NodeID, data: &Self::ProcessedData) -> Result<(), NCError>;
+    fn process_data_from_node(&mut self, node_id: NodeID, data: &Self::ProcessedDataT) -> Result<(), NCError>;
     /// Every node has to send a heartbeat message to the server. If it doesn't arrive in time (2 * the heartbeat value in the NCConfiguration)
     /// then this method is called with the corresponding node id and the node should be marked as offline in this method.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>);
@@ -144,7 +144,7 @@ impl NCServerStarter {
     /// In here the main loop and the tcp server are started.
     /// For every node connection the method start_node_thread() is called, which handles the node request in a separate thread.
     /// If the job is done one the main loop will exited
-    fn start_main_loop<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, server_process: ServerProcess<T, T::ServerCommand>) {
+    fn start_main_loop<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, server_process: ServerProcess<T, T::CustomMessageT>) {
         debug!("NCServerStarter::start_main_loop()");
 
         let ip_addr: IpAddr = "0.0.0.0".parse().unwrap(); // TODO: Make this configurable ?
@@ -178,7 +178,7 @@ impl NCServerStarter {
         server_process.nc_server.lock().unwrap().finish_job();
     }
     /// This starts a new thread for each node that sends a message to the server and calls the handle_node() method in that thread.
-    fn start_node_thread<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, stream: TcpStream, server_process: Arc<ServerProcess<T, T::ServerCommand>>) {
+    fn start_node_thread<T: NCServer + Send + 'static>(&self, thread_pool: &ThreadPool, stream: TcpStream, server_process: Arc<ServerProcess<T, T::CustomMessageT>>) {
         debug!("NCServerStarter::start_node_thread()");
 
         thread_pool.execute(move || {
@@ -224,7 +224,7 @@ impl ServerHeartbeat {
     /// can check all the registered nodes.
     fn send_check_heartbeat_message(&self) -> Result<(), NCError> {
         debug!("ServerHeartbeat::send_check_heartbeat_message()");
-        let message: NCNodeMessage<()> = NCNodeMessage::CheckHeartbeat;
+        let message: NCNodeMessage<(), ()> = NCNodeMessage::CheckHeartbeat;
 
         nc_send_data(&message, &self.server_socket)
     }
@@ -246,7 +246,7 @@ struct ServerProcess<T, U> {
     mailbox: Mutex<HashMap<NodeID, Vec<U>>>,
 }
 
-impl<T: NCServer> ServerProcess<T, T::ServerCommand> {
+impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
     /// Creates a new ServerProcess with the given user defined nc_server that implements the NCServer trait
     fn new(config: &NCConfiguration, nc_server: T) -> Self {
         debug!("ServerProcess::new()");
@@ -282,7 +282,7 @@ impl<T: NCServer> ServerProcess<T, T::ServerCommand> {
     fn handle_node(&self, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::handle_node()");
 
-        let request: NCNodeMessage<T::ProcessedData> = nc_receive_data(&mut stream)?;
+        let request: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = nc_receive_data(&mut stream)?;
 
         match request {
             NCNodeMessage::Register => {
@@ -347,22 +347,25 @@ impl<T: NCServer> ServerProcess<T, T::ServerCommand> {
             NCNodeMessage::MoveServer(_destination) => {
 
             }
+            NCNodeMessage::CustomMessage(_message, _destination) => {
+
+            }
         }
         Ok(())
     }
 
     /// Sends the NCServerMessage::InitialData message to the node with the given node_id and optional initial_data
-    fn send_initial_data_message(&self, node_id: NodeID, initial_data: Option<T::InitialData>, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_initial_data_message(&self, node_id: NodeID, initial_data: Option<T::InitialDataT>, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_initial_data_message()");
-        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::InitialData(node_id, initial_data);
+        let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::InitialData(node_id, initial_data);
 
         nc_send_data2(&message, &mut stream)
     }
 
     /// Sends the NCServerMessage::JobStatus Unfinished message with the given data to the node,
-    fn send_job_status_unfinished(&self, data: T::NewData, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_job_status_unfinished(&self, data: T::NewDataT, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_job_status_unfinished_message()");
-        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::JobStatus(NCJobStatus::Unfinished(data));
+        let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::JobStatus(NCJobStatus::Unfinished(data));
 
         nc_send_data2(&message, &mut stream)
     }
@@ -370,14 +373,14 @@ impl<T: NCServer> ServerProcess<T, T::ServerCommand> {
     /// Send the NCServerMessage::JobStatus Waiting message to the node.
     fn send_job_status_waiting(&self, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_job_status_waiting()");
-        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::JobStatus(NCJobStatus::Waiting);
+        let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::JobStatus(NCJobStatus::Waiting);
 
         nc_send_data2(&message, &mut stream)
     }
     /// Send the NCServerMessage::Command message to the node.
-    fn send_command(&self, command: T::ServerCommand, mut stream: TcpStream) -> Result<(), NCError> {
+    fn send_command(&self, command: T::CustomMessageT, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_command()");
-        let message: NCServerMessage<T::InitialData, T::NewData, T::ServerCommand> = NCServerMessage::Command(command);
+        let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::CustomMessage(command);
 
         nc_send_data2(&message, &mut stream)
     }

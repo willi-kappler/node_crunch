@@ -68,15 +68,15 @@ impl MandelServer {
 }
 
 impl NCServer for MandelServer {
-    type InitialData = ();
-    type NewData = ServerData;
-    type ProcessedData = NodeData;
-    type ServerCommand = ();
+    type InitialDataT = ();
+    type NewDataT = ServerData;
+    type ProcessedDataT = NodeData;
+    type CustomMessageT = ();
 
     /// Every node needs some data to process. Here this data is prepared for each node and some book keeping is saved in the chunks list.
     /// The whole mandelbrot image is split up into equally sized pieces and processed separately.
     /// Returns the NCJobStatus that is checked by the server.
-    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewData>, NCError> {
+    fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewDataT>, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
         if let Some((i, free_chunk)) = self.chunk_list.get_next_free_chunk() {
@@ -106,7 +106,7 @@ impl NCServer for MandelServer {
     }
 
     /// If one of the nodes has finished processing the small chunk the server writes the data back to the whole image Array2D.
-    fn process_data_from_node(&mut self, node_id: NodeID, node_data: &Self::ProcessedData) -> Result<(), NCError> {
+    fn process_data_from_node(&mut self, node_id: NodeID, node_data: &Self::ProcessedDataT) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
         let chunk_id = node_data.chunk_id;
