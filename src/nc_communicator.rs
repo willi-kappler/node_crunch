@@ -3,9 +3,11 @@
 use std::net::{TcpStream, ToSocketAddrs};
 use std::io::{Write, Read};
 
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use bincode::{deserialize, serialize};
+use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
+use crate::nc_config::{NCConfiguration};
 use crate::nc_error::NCError;
 
 pub struct NCCommunicator {
@@ -15,11 +17,11 @@ pub struct NCCommunicator {
 }
 
 impl NCCommunicator {
-    pub fn new() -> Self {
+    pub fn new(config: &NCConfiguration) -> Self {
         Self {
-            compress: true,
-            encrypt: false,
-            key: "".to_string(),
+            compress: config.compress,
+            encrypt: config.encrypt,
+            key: config.key.to_string(),
         }
     }
 
@@ -31,7 +33,7 @@ impl NCCommunicator {
         self.encrypt = encrypt
     }
 
-    pub fn set_kay(&mut self, key: String) {
+    pub fn set_key(&mut self, key: String) {
         self.key = key
     }
 
@@ -41,7 +43,28 @@ impl NCCommunicator {
     ///
     /// On failure it returns a [`NCError::Serialize`] error which contains the serde serialize error.
     pub fn nc_encode_data<S: Serialize>(&self, data: &S) -> Result<Vec<u8>, NCError> {
-        serialize(data).map_err(|e| NCError::Serialize(e))
+        let data = serialize(data).map_err(|e| NCError::Serialize(e))?;
+
+        match (self.compress, self.encrypt) {
+            (false, false) => {
+                // No compression, no encryption
+                Ok(data)
+            }
+            (true, false) => {
+                // Just compression, no encryption
+                let data = compress_prepend_size(&data);
+                Ok(data)
+            }
+            (false, true) => {
+                // No compression, just encryption
+                Ok(data)
+            }
+            (true, true) => {
+                // Both compression and encryption
+                let data = compress_prepend_size(&data);
+                Ok(data)
+            }
+        }
     }
 
     /// Decode the given data from a `&[u8]` slice to the type `T`.
@@ -49,8 +72,29 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError::Deserialize`] error which contains the serde deserialize error.
-    pub fn nc_decode_data<'de, D: Deserialize<'de>>(&self, data: &'de [u8]) -> Result<D, NCError> {
-        deserialize(data).map_err(|e| NCError::Deserialize(e))
+    pub fn nc_decode_data<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
+        let data: Vec<u8> = match (self.compress, self.encrypt) {
+            (false, false) => {
+                // No compression, no encryption
+                data.to_vec()
+            }
+            (true, false) => {
+                // Just compression, no encryption
+                let data = decompress_size_prepended(data).map_err(|_| NCError::Decompress)?;
+                data
+            }
+            (false, true) => {
+                // No compression, just encryption
+                data.to_vec()
+            }
+            (true, true) => {
+                // Both compression and encryption
+                let data = decompress_size_prepended(data).map_err(|_| NCError::Decompress)?;
+                data
+            }
+        };
+
+        deserialize(&data).map_err(|e| NCError::Deserialize(e))
     }
 
     /// Decode the data from an owned reference `&[u8]` to the type `T`.
@@ -124,7 +168,21 @@ mod tests {
 
     #[test]
     fn test_encode_decode() {
-        let nc_communicator = NCCommunicator::new();
+        let config = NCConfiguration::default();
+        let nc_communicator = NCCommunicator::new(&config);
+        let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
+
+        let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
+
+        let data3: (String, u32, bool) = nc_communicator.nc_decode_data(&data2).unwrap();
+
+        assert_eq!(data1, data3);
+    }
+
+    #[test]
+    fn test_encode_decode_compress() {
+        let config = NCConfiguration {compress: true, ..Default::default()};
+        let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
 
         let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
@@ -138,7 +196,8 @@ mod tests {
     fn test_send_data2() {
         use std::convert::TryInto;
 
-        let nc_communicator = NCCommunicator::new();
+        let config = NCConfiguration::default();
+        let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test send_data2!".to_string(), 121212, false);
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -159,7 +218,8 @@ mod tests {
 
     #[test]
     fn test_receive_data() {
-        let nc_communicator = NCCommunicator::new();
+        let config = NCConfiguration::default();
+        let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test receive_data!".to_string(), 998877, true);
         let mut data2 = nc_communicator.nc_encode_data(&data1).unwrap();
 
@@ -176,7 +236,8 @@ mod tests {
 
     #[test]
     fn test_send_and_receive() {
-        let nc_communicator = NCCommunicator::new();
+        let config = NCConfiguration::default();
+        let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test send and then receive data!".to_string(), 550055, true);
 
         let mut buffer: Vec<u8> = Vec::new();

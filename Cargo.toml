@@ -18,7 +18,7 @@ bincode = "1"
 rand = "0.7"
 thiserror = "1.0"
 threadpool = "1.0"
-
+lz4_flex = "0.8.2"
 
 [profile.release]
 lto = true

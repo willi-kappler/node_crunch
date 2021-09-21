@@ -24,6 +24,9 @@ pub enum NCError {
     /// The [`bincode`] crate has its own error.
     #[error("Bincode error: {0}")]
     Bincode(#[from] Box<bincode::ErrorKind>),
+    /// Decompression error
+    #[error("Decompression error")]
+    Decompress,
     /// The node expected a specific message from the server but got s.th. totally different.
     #[error("Server message mismatch error")]
     ServerMsgMismatch,

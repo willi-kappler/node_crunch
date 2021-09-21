@@ -102,12 +102,10 @@ impl NCNodeStarter {
         let ip_addr: IpAddr = self.config.address.parse()?;
         let server_addr = SocketAddr::new(ip_addr, self.config.port);
 
-        let mut node_process = NodeProcess::new(server_addr, nc_node,
-self.config.delay_request_data, self.config.retry_counter);
+        let mut node_process = NodeProcess::new(server_addr, nc_node, &self.config);
         node_process.get_initial_data()?;
 
-        let node_heartbeat = NodeHeartbeat::new(server_addr, node_process.node_id,
-            self.config.retry_counter, self.config.heartbeat);
+        let node_heartbeat = NodeHeartbeat::new(server_addr, node_process.node_id, &self.config);
 
         let thread_handle = self.start_heartbeat_thread(node_heartbeat);
         self.start_main_loop(node_process);
@@ -195,15 +193,15 @@ struct NodeHeartbeat {
 
 impl NodeHeartbeat {
     /// Creates a new NodeHeartbeat with the given arguments.
-    fn new(server_addr: SocketAddr, node_id: NodeID, retry_counter: u64, heartbeat_duration: u64) -> Self {
+    fn new(server_addr: SocketAddr, node_id: NodeID, config: &NCConfiguration) -> Self {
         debug!("NodeHeartbeat::new()");
 
         NodeHeartbeat {
             server_addr,
             node_id,
-            retry_counter: RetryCounter::new(retry_counter),
-            heartbeat_duration: Duration::from_secs(heartbeat_duration),
-            nc_communicator: NCCommunicator::new(),
+            retry_counter: RetryCounter::new(config.retry_counter),
+            heartbeat_duration: Duration::from_secs(config.heartbeat),
+            nc_communicator: NCCommunicator::new(config),
         }
     }
 
@@ -263,7 +261,7 @@ struct NodeProcess<T> {
 
 impl<T: NCNode> NodeProcess<T> {
     /// Creates a new NodeProcess with the given arguments.
-    fn new(server_addr: SocketAddr, nc_node: T, delay_duration: u64, retry_counter: u64) -> Self {
+    fn new(server_addr: SocketAddr, nc_node: T, config: &NCConfiguration) -> Self {
         debug!("NodeProcess::new()");
 
         NodeProcess{
@@ -271,9 +269,9 @@ impl<T: NCNode> NodeProcess<T> {
             nc_node,
             // This will be set in the method get_initial_data()
             node_id: NodeID::unset(),
-            retry_counter: RetryCounter::new(retry_counter),
-            delay_duration: Duration::from_secs(delay_duration),
-            nc_communicator: NCCommunicator::new(),
+            retry_counter: RetryCounter::new(config.retry_counter),
+            delay_duration: Duration::from_secs(config.delay_request_data),
+            nc_communicator: NCCommunicator::new(config),
         }
     }
 
@@ -473,8 +471,12 @@ mod tests {
 
     #[test]
     fn test_nhb_dec_and_check_counter1() {
-        let mut nhb = NodeHeartbeat::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-        NodeID::unset(), 5, 60);
+        let config = NCConfiguration::default();
+        let mut nhb = NodeHeartbeat::new(
+    SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                8080),
+        NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -493,8 +495,12 @@ mod tests {
 
     #[test]
     fn test_nhb_reset_counter() {
-        let mut nhb = NodeHeartbeat::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-        NodeID::unset(), 5, 60);
+        let config = NCConfiguration::default();
+        let mut nhb = NodeHeartbeat::new(
+    SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                8080),
+        NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -510,8 +516,12 @@ mod tests {
     #[test]
     fn test_np_dec_and_check_counter() {
         let nc_node = TestNode{};
-        let mut np = NodeProcess::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            nc_node, 60, 5);
+        let config = NCConfiguration::default();
+        let mut np = NodeProcess::new(
+        SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                  8080),
+            nc_node, &config);
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());
@@ -531,8 +541,12 @@ mod tests {
     #[test]
     fn test_np_reset_counter() {
         let nc_node = TestNode{};
-        let mut np = NodeProcess::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            nc_node, 60, 5);
+        let config = NCConfiguration::default();
+        let mut np = NodeProcess::new(
+        SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                  8080),
+            nc_node, &config);
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());

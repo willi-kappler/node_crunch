@@ -211,7 +211,7 @@ impl ServerHeartbeat {
         ServerHeartbeat{
             server_socket,
             duration,
-            nc_communicator: NCCommunicator::new(),
+            nc_communicator: NCCommunicator::new(config),
         }
     }
 
@@ -263,7 +263,7 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
             node_list: Mutex::new(NCNodeList::new()),
             job_done: AtomicBool::new(false),
             mailbox: Mutex::new(HashMap::new()),
-            nc_communicator: NCCommunicator::new(),
+            nc_communicator: NCCommunicator::new(config),
         }
     }
 

@@ -19,6 +19,12 @@ pub struct NCConfiguration{
     pub retry_counter: u64,
     /// The number of threads in the thread pool, default: 8.
     pub pool_size: u64,
+    /// Enable compression during communication
+    pub compress: bool,
+    /// Enable encryption during communication
+    pub encrypt: bool,
+    /// Encryption key
+    pub key: String,
 }
 
 impl Default for NCConfiguration {
@@ -29,14 +35,20 @@ impl Default for NCConfiguration {
             heartbeat: 60,
             delay_request_data: 60,
             retry_counter: 5,
-            pool_size: 8
+            pool_size: 8,
+            compress: false,
+            encrypt: false,
+            key: "".to_string(),
         }
     }
 }
 
 impl Display for NCConfiguration {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "address: '{}', port: '{}', heartbeat: '{}'\ndelay request data: '{}', retry counter: '{}', pool size: '{}'",
-            self.address, self.port, self.heartbeat, self.delay_request_data, self.retry_counter, self.pool_size)
+        write!(f, "address: '{}', port: '{}', heartbeat: '{}'\n
+                  delay request data: '{}', retry counter: '{}', pool size: '{}'\n
+                  compress: '{}', encrypt: '{}'",
+            self.address, self.port, self.heartbeat, self.delay_request_data,
+            self.retry_counter, self.pool_size, self.compress, self.encrypt)
     }
 }
