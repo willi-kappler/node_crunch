@@ -28,13 +28,12 @@ pub mod nc_node;
 pub mod nc_node_info;
 pub mod nc_error;
 pub mod nc_config;
-pub mod nc_util;
 pub mod array2d;
+pub mod nc_communicator;
 
 pub use nc_server::{NCServer, NCJobStatus, NCServerStarter};
 pub use nc_node::{NCNode, NCNodeStarter};
 pub use nc_node_info::NodeID;
 pub use nc_error::NCError;
 pub use nc_config::NCConfiguration;
-// pub use nc_util::{nc_decode_data, nc_decode_data2, nc_encode_data};
 pub use array2d::{Array2D, Array2DChunk, ChunkList, Chunk};

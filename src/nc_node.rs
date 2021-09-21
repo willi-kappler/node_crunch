@@ -13,7 +13,7 @@ use crate::nc_error::NCError;
 use crate::nc_server::{NCServerMessage, NCJobStatus};
 use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::NodeID;
-use crate::nc_util::{nc_send_receive_data, nc_send_data};
+use crate::nc_communicator::{NCCommunicator};
 
 /// This message is sent from the node to the server in order to register, receive new data and send processed data.
 #[derive(Debug, Serialize, Deserialize)]
@@ -189,6 +189,8 @@ struct NodeHeartbeat {
     retry_counter: RetryCounter,
     /// Send every heartbeat_duration seconds the xxx message to the server.
     heartbeat_duration: Duration,
+    /// Handles all the communication
+    nc_communicator: NCCommunicator,
 }
 
 impl NodeHeartbeat {
@@ -201,6 +203,7 @@ impl NodeHeartbeat {
             node_id,
             retry_counter: RetryCounter::new(retry_counter),
             heartbeat_duration: Duration::from_secs(heartbeat_duration),
+            nc_communicator: NCCommunicator::new(),
         }
     }
 
@@ -216,7 +219,7 @@ impl NodeHeartbeat {
         debug!("NodeHeartbeat::send_heartbeat_message()");
         let message: NCNodeMessage<(), ()> = NCNodeMessage::HeartBeat(self.node_id);
 
-        nc_send_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_data(&message, &self.server_addr)
     }
 
     /// Returns the current value of the retry counter.
@@ -254,6 +257,8 @@ struct NodeProcess<T> {
     retry_counter: RetryCounter,
     /// In case of IO error wait delay_duration seconds before trying to contact the server again.
     delay_duration: Duration,
+    /// Handles all the communication
+    nc_communicator: NCCommunicator,
 }
 
 impl<T: NCNode> NodeProcess<T> {
@@ -268,6 +273,7 @@ impl<T: NCNode> NodeProcess<T> {
             node_id: NodeID::unset(),
             retry_counter: RetryCounter::new(retry_counter),
             delay_duration: Duration::from_secs(delay_duration),
+            nc_communicator: NCCommunicator::new(),
         }
     }
 
@@ -298,7 +304,7 @@ impl<T: NCNode> NodeProcess<T> {
         debug!("NodeProcess::send_register_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::Register;
 
-        nc_send_receive_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_receive_data(&message, &self.server_addr)
     }
 
     /// This method sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
@@ -354,7 +360,7 @@ impl<T: NCNode> NodeProcess<T> {
         debug!("NodeProcess::send_needs_data_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::NeedsData(self.node_id);
 
-        nc_send_receive_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_receive_data(&message, &self.server_addr)
     }
 
     /// Process the new data from the server and sends the result back to the server using
@@ -364,7 +370,7 @@ impl<T: NCNode> NodeProcess<T> {
         let result = self.nc_node.process_data_from_server(data)?;
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::HasData(self.node_id, result);
 
-        nc_send_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_data(&message, &self.server_addr)
     }
 
     /// Returns the current value of the retry counter.
