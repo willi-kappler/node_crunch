@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn test_encode_decode() {
-        let config = NCConfiguration::default();
+        let config = NCConfiguration {compress: false, encrypt: false, ..Default::default()};
         let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
 
@@ -181,7 +181,33 @@ mod tests {
 
     #[test]
     fn test_encode_decode_compress() {
-        let config = NCConfiguration {compress: true, ..Default::default()};
+        let config = NCConfiguration {compress: true, encrypt: false, ..Default::default()};
+        let nc_communicator = NCCommunicator::new(&config);
+        let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
+
+        let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
+
+        let data3: (String, u32, bool) = nc_communicator.nc_decode_data(&data2).unwrap();
+
+        assert_eq!(data1, data3);
+    }
+
+    #[test]
+    fn test_encode_decode_encrypt() {
+        let config = NCConfiguration {compress: false, encrypt: true, key: "7Fv2YhMzwrQHoXRAirOkB0QQDOjS4qnZwQyPRiLRLTCc3c5ZJLZ9F2LzLcMgwvNTySwmmdWssHXbfGQoYwecCdxpBufXp4BFgBG0".to_string(), ..Default::default()};
+        let nc_communicator = NCCommunicator::new(&config);
+        let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
+
+        let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
+
+        let data3: (String, u32, bool) = nc_communicator.nc_decode_data(&data2).unwrap();
+
+        assert_eq!(data1, data3);
+    }
+
+    #[test]
+    fn test_encode_decode_compress_encrypt() {
+        let config = NCConfiguration {compress: true, encrypt: true, key: "VnlUYvqu5S4tNHty0ccA1LAlsgqIXhIsqf6HI6uDrdAxBSNx8Y55g12yo37bvlPynegnvBCxj2mTjWzqfq8Vdu6F6MODzP8qs7zK".to_string(), ..Default::default()};
         let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
 
@@ -196,7 +222,7 @@ mod tests {
     fn test_send_data2() {
         use std::convert::TryInto;
 
-        let config = NCConfiguration::default();
+        let config = NCConfiguration {compress: false, encrypt: false, ..Default::default()};
         let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test send_data2!".to_string(), 121212, false);
 
@@ -218,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_receive_data() {
-        let config = NCConfiguration::default();
+        let config = NCConfiguration {compress: false, encrypt: false, ..Default::default()};
         let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test receive_data!".to_string(), 998877, true);
         let mut data2 = nc_communicator.nc_encode_data(&data1).unwrap();
@@ -236,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_send_and_receive() {
-        let config = NCConfiguration::default();
+        let config = NCConfiguration {compress: false, encrypt: false, ..Default::default()};
         let nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Test send and then receive data!".to_string(), 550055, true);
 

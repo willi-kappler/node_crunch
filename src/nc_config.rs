@@ -36,7 +36,7 @@ impl Default for NCConfiguration {
             delay_request_data: 60,
             retry_counter: 5,
             pool_size: 8,
-            compress: false,
+            compress: true,
             encrypt: false,
             key: "".to_string(),
         }
