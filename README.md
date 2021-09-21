@@ -7,7 +7,7 @@
 Allows to distribute computations across several nodes.
 (Keywords: numeric computing, scientific computing, HPC)
 
-Version 0.1 (2021.07.25)
+Version 0.2 (2021.10.xx)
 
 ```toml
 [dependencies]

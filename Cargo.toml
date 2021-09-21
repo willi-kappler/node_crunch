@@ -9,7 +9,7 @@ keywords = ["distribute", "numeric", "computing", "cluster", "hpc"]
 license = "MIT"
 name = "node_crunch"
 repository = "https://github.com/willi-kappler/node_crunch/"
-version = "0.1.0"
+version = "0.2.0"
 
 [dependencies]
 log = "0.4"

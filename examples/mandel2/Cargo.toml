@@ -1,6 +1,6 @@
 [package]
 name = "mandel2"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Willi Kappler <grandor@gmx.de"]
 description = "A crate for distributed computing"
 keywords = ["distribute", "network", "numeric", "computing", "cluster", "hpc"]
