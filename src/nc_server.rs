@@ -125,7 +125,7 @@ impl NCServerStarter {
     /// If there is an IO error the loop exits because the server also has finished its main loop and
     /// doesn't accept any tcp connections anymore.
     /// The job is done and no more heartbeats will arrive.
-    fn start_heartbeat_thread(&self, thread_pool: &ThreadPool, server_heartbeat: ServerHeartbeat) {
+    fn start_heartbeat_thread(&mut self, thread_pool: &ThreadPool, server_heartbeat: ServerHeartbeat) {
         debug!("NCServerStarter::start_heartbeat_thread()");
 
         thread_pool.execute(move || {
@@ -196,7 +196,7 @@ struct ServerHeartbeat {
     /// heartbeat timeout duration * 2, this gives the node enough time to send their heartbeat messages.
     duration: Duration,
     /// Handles all the communication
-    nc_communicator: NCCommunicator,
+    nc_communicator: Mutex<NCCommunicator>,
 }
 
 impl ServerHeartbeat {
@@ -211,7 +211,7 @@ impl ServerHeartbeat {
         ServerHeartbeat{
             server_socket,
             duration,
-            nc_communicator: NCCommunicator::new(config),
+            nc_communicator: Mutex::new(NCCommunicator::new(config)),
         }
     }
 
@@ -229,7 +229,7 @@ impl ServerHeartbeat {
         debug!("ServerHeartbeat::send_check_heartbeat_message()");
         let message: NCNodeMessage<(), ()> = NCNodeMessage::CheckHeartbeat;
 
-        self.nc_communicator.nc_send_data(&message, &self.server_socket)
+        self.nc_communicator.lock()?.nc_send_data(&message, &self.server_socket)
     }
 }
 
@@ -248,7 +248,7 @@ struct ServerProcess<T, U> {
     /// A mailbox for each node, contains special commands that should be sent to the nodes.
     mailbox: Mutex<HashMap<NodeID, Vec<U>>>,
     /// Handles all the communication
-    nc_communicator: NCCommunicator,
+    nc_communicator: Mutex<NCCommunicator>,
 }
 
 impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
@@ -263,7 +263,7 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
             node_list: Mutex::new(NCNodeList::new()),
             job_done: AtomicBool::new(false),
             mailbox: Mutex::new(HashMap::new()),
-            nc_communicator: NCCommunicator::new(config),
+            nc_communicator: Mutex::new(NCCommunicator::new(config)),
         }
     }
 
@@ -288,7 +288,8 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
     fn handle_node(&self, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::handle_node()");
 
-        let request: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = self.nc_communicator.nc_receive_data(&mut stream)?;
+        let request: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> =
+            self.nc_communicator.lock()?.nc_receive_data(&mut stream)?;
 
         match request {
             NCNodeMessage::Register => {
@@ -365,7 +366,7 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
         debug!("ServerProcess::send_initial_data_message()");
         let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::InitialData(node_id, initial_data);
 
-        self.nc_communicator.nc_send_data2(&message, &mut stream)
+        self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
 
     /// Sends the NCServerMessage::JobStatus Unfinished message with the given data to the node,
@@ -373,7 +374,7 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
         debug!("ServerProcess::send_job_status_unfinished_message()");
         let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::JobStatus(NCJobStatus::Unfinished(data));
 
-        self.nc_communicator.nc_send_data2(&message, &mut stream)
+        self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
 
     /// Send the NCServerMessage::JobStatus Waiting message to the node.
@@ -381,13 +382,13 @@ impl<T: NCServer> ServerProcess<T, T::CustomMessageT> {
         debug!("ServerProcess::send_job_status_waiting()");
         let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::JobStatus(NCJobStatus::Waiting);
 
-        self.nc_communicator.nc_send_data2(&message, &mut stream)
+        self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
     /// Send the NCServerMessage::Command message to the node.
     fn send_command(&self, command: T::CustomMessageT, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_command()");
         let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::CustomMessage(command);
 
-        self.nc_communicator.nc_send_data2(&message, &mut stream)
+        self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
 }

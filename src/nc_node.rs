@@ -213,7 +213,7 @@ impl NodeHeartbeat {
     }
 
     /// Send the NCNodeMessage::HeartBeat message to the server.
-    fn send_heartbeat_message(&self) -> Result<(), NCError> {
+    fn send_heartbeat_message(&mut self) -> Result<(), NCError> {
         debug!("NodeHeartbeat::send_heartbeat_message()");
         let message: NCNodeMessage<(), ()> = NCNodeMessage::HeartBeat(self.node_id);
 
@@ -298,7 +298,7 @@ impl<T: NCNode> NodeProcess<T> {
     }
 
     /// Send the NCNodeMessage::Register message to the server.
-    fn send_register_message(&self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
+    fn send_register_message(&mut self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
         debug!("NodeProcess::send_register_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::Register;
 
@@ -354,7 +354,7 @@ impl<T: NCNode> NodeProcess<T> {
     }
 
     /// Send the NCNodeMessage::NeedsData message to the server.
-    fn send_needs_data_message(&self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
+    fn send_needs_data_message(&mut self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
         debug!("NodeProcess::send_needs_data_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::NeedsData(self.node_id);
 
