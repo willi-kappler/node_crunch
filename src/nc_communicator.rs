@@ -6,6 +6,8 @@ use std::io::{Write, Read};
 use serde::{Serialize, de::DeserializeOwned};
 use bincode::{deserialize, serialize};
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::aead::{Aead, NewAead};
 
 use crate::nc_config::{NCConfiguration};
 use crate::nc_error::NCError;
@@ -13,18 +15,34 @@ use crate::nc_error::NCError;
 pub struct NCCommunicator {
     compress: bool,
     encrypt: bool,
-    key: String,
+    cipher: ChaCha20Poly1305,
     nonce: u64,
 }
 
 impl NCCommunicator {
     pub fn new(config: &NCConfiguration) -> Self {
+        let key = Key::from_slice(config.key.as_bytes());
+        let cipher = ChaCha20Poly1305::new(key);
+
         Self {
             compress: config.compress,
             encrypt: config.encrypt,
-            key: config.key.to_string(),
+            cipher,
             nonce: 0,
         }
+    }
+
+    fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>, NCError> {
+        let nonce: [u8; 8] = self.nonce.to_be_bytes();
+        let nonce = Nonce::from_slice(&nonce);
+        // TODO: prepend nonce to data
+        self.cipher.encrypt(nonce, data).map_err(|_| NCError::Encrypt)
+    }
+
+    fn decrypt_data(&self, data: &[u8]) -> Result<Vec<u8>, NCError> {
+        let (nonce, data) = data.split_at(8);
+        let nonce = Nonce::from_slice(nonce);
+        self.cipher.decrypt(nonce, data).map_err(|_| NCError::Decrypt)
     }
 
     /// Encodes the given data to a [`Vec<u8>`].
@@ -32,32 +50,19 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError::Serialize`] error which contains the serde serialize error.
-    pub fn nc_encode_data<S: Serialize>(&mut self, data: &S) -> Result<Vec<u8>, NCError> {
-        let data = serialize(data).map_err(|e| NCError::Serialize(e))?;
+    pub(crate) fn nc_encode_data<S: Serialize>(&mut self, data: &S) -> Result<Vec<u8>, NCError> {
+        let mut data_out = serialize(data).map_err(|e| NCError::Serialize(e))?;
 
-        match (self.compress, self.encrypt) {
-            (false, false) => {
-                // No compression, no encryption
-                Ok(data)
-            }
-            (true, false) => {
-                // Just compression, no encryption
-                let data = compress_prepend_size(&data);
-
-                // Nonce must be unique for each message!
-                self.nonce += 1;
-                Ok(data)
-            }
-            (false, true) => {
-                // No compression, just encryption
-                Ok(data)
-            }
-            (true, true) => {
-                // Both compression and encryption
-                let data = compress_prepend_size(&data);
-                Ok(data)
-            }
+        if self.encrypt {
+            data_out = self.encrypt_data(&data_out)?;
+            self.nonce += 1;
         }
+
+        if self.compress {
+            data_out = compress_prepend_size(&data_out);
+        }
+
+        Ok(data_out)
     }
 
     /// Decode the given data from a `&[u8]` slice to the type `T`.
@@ -65,29 +70,18 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError::Deserialize`] error which contains the serde deserialize error.
-    pub fn nc_decode_data<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
-        let data: Vec<u8> = match (self.compress, self.encrypt) {
-            (false, false) => {
-                // No compression, no encryption
-                data.to_vec()
-            }
-            (true, false) => {
-                // Just compression, no encryption
-                let data = decompress_size_prepended(data).map_err(|_| NCError::Decompress)?;
-                data
-            }
-            (false, true) => {
-                // No compression, just encryption
-                data.to_vec()
-            }
-            (true, true) => {
-                // Both compression and encryption
-                let data = decompress_size_prepended(data).map_err(|_| NCError::Decompress)?;
-                data
-            }
-        };
+    pub(crate) fn nc_decode_data<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
+        let mut data_out: Vec<u8> = data.to_vec();
 
-        deserialize(&data).map_err(|e| NCError::Deserialize(e))
+        if self.compress {
+            data_out = decompress_size_prepended(&data_out).map_err(|_| NCError::Decompress)?;
+        }
+
+        if self.encrypt {
+            data_out = self.decrypt_data(&data_out)?;
+        }
+
+        deserialize(&data_out).map_err(|e| NCError::Deserialize(e))
     }
 
     /// Decode the data from an owned reference `&[u8]` to the type `T`.
@@ -95,7 +89,7 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError::Deserialize`] error which contains the serde deserialize error.
-    pub fn nc_decode_data2<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
+    pub(crate) fn nc_decode_data2<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
         deserialize(data).map_err(|e| NCError::Deserialize(e))
     }
 
@@ -104,7 +98,7 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError`].
-    pub fn nc_send_data<S: Serialize, A: ToSocketAddrs>(&mut self, data: &S, socket_addr: &A) -> Result<(), NCError> {
+    pub(crate) fn nc_send_data<S: Serialize, A: ToSocketAddrs>(&mut self, data: &S, socket_addr: &A) -> Result<(), NCError> {
         let mut tcp_stream = TcpStream::connect(socket_addr)?;
         self.nc_send_data2(data, &mut tcp_stream)
     }
@@ -114,7 +108,7 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError`].
-    pub fn nc_send_data2<S: Serialize, W: Write>(&mut self, data: &S, tcp_stream: &mut W) -> Result<(), NCError> {
+    pub(crate) fn nc_send_data2<S: Serialize, W: Write>(&mut self, data: &S, tcp_stream: &mut W) -> Result<(), NCError> {
         let data = self.nc_encode_data(data)?;
         let data_len = data.len() as u64; // u64 is platform independent, usize is platform dependent
 
@@ -129,7 +123,7 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError`].
-    pub fn nc_receive_data<D: DeserializeOwned, R: Read>(&self, tcp_stream: &mut R) -> Result<D, NCError> {
+    pub(crate) fn nc_receive_data<D: DeserializeOwned, R: Read>(&self, tcp_stream: &mut R) -> Result<D, NCError> {
         let mut data_len: [u8; 8] = [0; 8];
         tcp_stream.read_exact(&mut data_len)?;
         let data_len = u64::from_le_bytes(data_len);  // u64 is platform independent, usize is platform dependent
@@ -147,7 +141,7 @@ impl NCCommunicator {
     /// # Errors
     ///
     /// On failure it returns a [`NCError`].
-    pub fn nc_send_receive_data<S: Serialize, D: DeserializeOwned, A: ToSocketAddrs>(&mut self, data: &S, socket_addr: &A) -> Result<D, NCError> {
+    pub(crate) fn nc_send_receive_data<S: Serialize, D: DeserializeOwned, A: ToSocketAddrs>(&mut self, data: &S, socket_addr: &A) -> Result<D, NCError> {
         let mut tcp_stream = TcpStream::connect(socket_addr)?;
 
         self.nc_send_data2(data, &mut tcp_stream)?;

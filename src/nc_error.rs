@@ -27,6 +27,12 @@ pub enum NCError {
     /// Decompression error
     #[error("Decompression error")]
     Decompress,
+    /// Encrypt error
+    #[error("Encrypt error")]
+    Encrypt,
+    /// Decrypt error
+    #[error("Decrypt error")]
+    Decrypt,
     /// The node expected a specific message from the server but got s.th. totally different.
     #[error("Server message mismatch error")]
     ServerMsgMismatch,
