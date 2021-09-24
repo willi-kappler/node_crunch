@@ -50,6 +50,10 @@ pub fn run_node(options: Mandel1Opt) {
     let configuration = NCConfiguration {
         port: options.port,
         address: options.ip,
+        compress: true,
+        encrypt: true,
+        // The key should be read from a config file
+        key: "ZKS1GQ3MYWEKFILSN6KESXU2GD9015CH".to_string(),
         ..Default::default()
     };
 
