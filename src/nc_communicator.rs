@@ -89,15 +89,6 @@ impl NCCommunicator {
         deserialize(&data_out).map_err(|e| NCError::Deserialize(e))
     }
 
-    /// Decode the data from an owned reference `&[u8]` to the type `T`.
-    ///
-    /// # Errors
-    ///
-    /// On failure it returns a [`NCError::Deserialize`] error which contains the serde deserialize error.
-    pub(crate) fn nc_decode_data2<D: DeserializeOwned>(&self, data: &[u8]) -> Result<D, NCError> {
-        deserialize(data).map_err(|e| NCError::Deserialize(e))
-    }
-
     /// Open a tcp connection and sends the data using the nc_send_data2() function.
     ///
     /// # Errors
