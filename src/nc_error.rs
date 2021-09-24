@@ -26,7 +26,7 @@ pub enum NCError {
     Bincode(#[from] Box<bincode::ErrorKind>),
     /// Decompression error
     #[error("Decompression error")]
-    Decompress,
+    Decompress(#[from] lz4_flex::block::DecompressError),
     /// Encrypt error
     #[error("Encrypt error")]
     Encrypt,

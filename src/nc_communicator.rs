@@ -33,16 +33,21 @@ impl NCCommunicator {
     }
 
     fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>, NCError> {
-        let nonce: [u8; 8] = self.nonce.to_be_bytes();
-        let nonce = Nonce::from_slice(&nonce);
-        // TODO: prepend nonce to data
-        self.cipher.encrypt(nonce, data).map_err(|_| NCError::Encrypt)
+        let bytes: [u8; 8] = self.nonce.to_be_bytes();
+        let mut nonce_bytes: Vec<u8> = vec![0, 0, 0, 0];
+        nonce_bytes.extend_from_slice(&bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let encrypted_data = self.cipher.encrypt(nonce, data).map_err(|_| NCError::Encrypt)?;
+        let mut full_data = Vec::with_capacity(nonce_bytes.len() + encrypted_data.len());
+        full_data.extend_from_slice(&nonce_bytes);
+        full_data.extend_from_slice(&encrypted_data);
+        Ok(full_data)
     }
 
     fn decrypt_data(&self, data: &[u8]) -> Result<Vec<u8>, NCError> {
-        let (nonce, data) = data.split_at(8);
-        let nonce = Nonce::from_slice(nonce);
-        self.cipher.decrypt(nonce, data).map_err(|_| NCError::Decrypt)
+        let (nonce_bytes, encrypted_data) = data.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+        self.cipher.decrypt(nonce, encrypted_data).map_err(|_| NCError::Encrypt)
     }
 
     /// Encodes the given data to a [`Vec<u8>`].
@@ -74,7 +79,7 @@ impl NCCommunicator {
         let mut data_out: Vec<u8> = data.to_vec();
 
         if self.compress {
-            data_out = decompress_size_prepended(&data_out).map_err(|_| NCError::Decompress)?;
+            data_out = decompress_size_prepended(&data_out)?;
         }
 
         if self.encrypt {
@@ -181,26 +186,38 @@ mod tests {
 
     #[test]
     fn test_encode_decode_encrypt() {
-        let config = NCConfiguration {compress: false, encrypt: true, key: "7Fv2YhMzwrQHoXRAirOkB0QQDOjS4qnZwQyPRiLRLTCc3c5ZJLZ9F2LzLcMgwvNTySwmmdWssHXbfGQoYwecCdxpBufXp4BFgBG0".to_string(), ..Default::default()};
+        let config = NCConfiguration {compress: false, encrypt: true, key: "7Fv2YhMzwrQHoXRAirOkB0QQDOjS4qnZ".to_string(), ..Default::default()};
         let mut nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
 
+        assert_eq!(nc_communicator.nonce, 0);
+
         let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
 
+        assert_eq!(nc_communicator.nonce, 1);
+
         let data3: (String, u32, bool) = nc_communicator.nc_decode_data(&data2).unwrap();
+
+        assert_eq!(nc_communicator.nonce, 1);
 
         assert_eq!(data1, data3);
     }
 
     #[test]
     fn test_encode_decode_compress_encrypt() {
-        let config = NCConfiguration {compress: true, encrypt: true, key: "VnlUYvqu5S4tNHty0ccA1LAlsgqIXhIsqf6HI6uDrdAxBSNx8Y55g12yo37bvlPynegnvBCxj2mTjWzqfq8Vdu6F6MODzP8qs7zK".to_string(), ..Default::default()};
+        let config = NCConfiguration {compress: true, encrypt: true, key: "VnlUYvqu5S4tNHty0ccA1LAlsgqIXhIs".to_string(), ..Default::default()};
         let mut nc_communicator = NCCommunicator::new(&config);
         let data1: (String, u32, bool) = ("Hello World!".to_string(), 123456, false);
 
+        assert_eq!(nc_communicator.nonce, 0);
+
         let data2 = nc_communicator.nc_encode_data(&data1).unwrap();
 
+        assert_eq!(nc_communicator.nonce, 1);
+
         let data3: (String, u32, bool) = nc_communicator.nc_decode_data(&data2).unwrap();
+
+        assert_eq!(nc_communicator.nonce, 1);
 
         assert_eq!(data1, data3);
     }

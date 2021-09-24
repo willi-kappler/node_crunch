@@ -38,7 +38,7 @@ impl Default for NCConfiguration {
             pool_size: 8,
             compress: true,
             encrypt: false,
-            key: "".to_string(),
+            key: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX".to_string(),
         }
     }
 }
