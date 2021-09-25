@@ -5,15 +5,6 @@
 //! See some of the programs in the example folders.
 
 // TODO:
-// - Add TLS / encryption / secure connection. Use https ? Use warp (https://github.com/seanmonstar/warp) ?
-// - Add authentication ?
-// - Speed up serde: https://github.com/serde-rs/bytes
-// - Maybe use https://docs.rs/orion/0.16.0/orion/auth/struct.SecretKey.html to encrypt messages ?
-// - Also have a look into QUIC (https://github.com/cloudflare/quiche)
-// - Strobe looks interesting: https://github.com/rozbb/strobe-rs
-// - Maybe https://docs.rs/chacha20poly1305/0.9.0/chacha20poly1305/
-// - Maybe https://docs.rs/block-modes/0.8.1/block_modes/
-//
 // Examples to add:
 // - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
 // - Distributed machine learning ?
