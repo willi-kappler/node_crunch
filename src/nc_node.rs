@@ -73,7 +73,7 @@ pub trait NCNode {
     /// The server has send a special user defined command to the node.
     /// Usually this is not needed, only for debug purposes or if s.th. special has happened (user interaction for example)
     fn process_custom_message(&mut self, _command: &Self::CustomMessageT) {
-        // debug!("Got a command from server: {:?}", command);
+        debug!("Got a command from server");
     }
 }
 
@@ -342,7 +342,7 @@ impl<T: NCNode> NodeProcess<T> {
                 }
             }
             NCServerMessage::CustomMessage(message) => {
-                // Forward command to user code
+                // Forward custom message to user code
                 self.nc_node.process_custom_message(&message);
                 Ok(())
             }
