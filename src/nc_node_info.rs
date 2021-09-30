@@ -108,6 +108,20 @@ impl NCNodeList {
             }
         }
     }
+
+    /// Return the number og nodes that have registered since the start of the server.
+    /// Note that this also includes inactive nodes.
+    pub(crate) fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Return a list of node ids and elapsed heartbeats as
+    /// Vec<(NodeID, f64)>
+    pub(crate) fn get_time_stamps(& self) -> Vec<(NodeID, f64)> {
+        self.nodes.iter().map(|node_info| {
+            (node_info.node_id, node_info.instant.elapsed().as_secs_f64())
+        }).collect()
+    }
 }
 
 #[cfg(test)]
