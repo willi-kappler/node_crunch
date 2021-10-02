@@ -3,8 +3,9 @@
 //! set_initial_data() and process_data_from_server()
 
 use std::net::{IpAddr, SocketAddr};
-use std::{thread, time::Duration};
-use std::thread::{spawn, JoinHandle};
+use std::{time::Duration};
+use std::thread::{self, spawn, JoinHandle};
+use std::sync::{Arc, Mutex};
 
 use log::{error, info, debug};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
@@ -70,10 +71,10 @@ pub trait NCNode {
     /// deserialize the data.
     fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError>;
 
-    /// The server has send a special user defined command to the node.
+    /// The server has send a special user defined custom message to the node.
     /// Usually this is not needed, only for debug purposes or if s.th. special has happened (user interaction for example)
-    fn process_custom_message(&mut self, _command: &Self::CustomMessageT) {
-        debug!("Got a command from server");
+    fn process_custom_message(&mut self, _custom_message: &Self::CustomMessageT) {
+        debug!("Got a custom message from server");
     }
 }
 
@@ -101,8 +102,9 @@ impl NCNodeStarter {
 
         let ip_addr: IpAddr = self.config.address.parse()?;
         let server_addr = SocketAddr::new(ip_addr, self.config.port);
+        let server_addr = Arc::new(Mutex::new(server_addr));
 
-        let mut node_process = NodeProcess::new(server_addr, nc_node, &self.config);
+        let mut node_process = NodeProcess::new(server_addr.clone(), nc_node, &self.config);
         node_process.get_initial_data()?;
 
         let node_heartbeat = NodeHeartbeat::new(server_addr, node_process.node_id, &self.config);
@@ -180,7 +182,7 @@ impl NCNodeStarter {
 /// Manages and sends heartbeat messages to the server.
 struct NodeHeartbeat {
     /// IP address and port of the server.
-    server_addr: SocketAddr,
+    server_addr: Arc<Mutex<SocketAddr>>,
     /// The node id for this node,
     node_id: NodeID,
     /// How often should the heartbeat thread try to contact the server before giving up.
@@ -193,7 +195,7 @@ struct NodeHeartbeat {
 
 impl NodeHeartbeat {
     /// Creates a new NodeHeartbeat with the given arguments.
-    fn new(server_addr: SocketAddr, node_id: NodeID, config: &NCConfiguration) -> Self {
+    fn new(server_addr: Arc<Mutex<SocketAddr>>, node_id: NodeID, config: &NCConfiguration) -> Self {
         debug!("NodeHeartbeat::new()");
 
         NodeHeartbeat {
@@ -216,8 +218,9 @@ impl NodeHeartbeat {
     fn send_heartbeat_message(&mut self) -> Result<(), NCError> {
         debug!("NodeHeartbeat::send_heartbeat_message()");
         let message: NCNodeMessage<(), ()> = NCNodeMessage::HeartBeat(self.node_id);
+        let server_addr = *self.server_addr.lock()?;
 
-        self.nc_communicator.nc_send_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_data(&message, &server_addr)
     }
 
     /// Returns the current value of the retry counter.
@@ -246,7 +249,7 @@ impl NodeHeartbeat {
 /// Communication with the server and processing of data.
 struct NodeProcess<T> {
     /// IP address and port of the server.
-    server_addr: SocketAddr,
+    server_addr: Arc<Mutex<SocketAddr>>,
     /// The suer defined data structure that implements the NCNode trait.
     nc_node: T,
     /// The node id for this node,
@@ -261,7 +264,7 @@ struct NodeProcess<T> {
 
 impl<T: NCNode> NodeProcess<T> {
     /// Creates a new NodeProcess with the given arguments.
-    fn new(server_addr: SocketAddr, nc_node: T, config: &NCConfiguration) -> Self {
+    fn new(server_addr: Arc<Mutex<SocketAddr>>, nc_node: T, config: &NCConfiguration) -> Self {
         debug!("NodeProcess::new()");
 
         NodeProcess{
@@ -301,8 +304,9 @@ impl<T: NCNode> NodeProcess<T> {
     fn send_register_message(&mut self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
         debug!("NodeProcess::send_register_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::Register;
+        let server_addr = *self.server_addr.lock()?;
 
-        self.nc_communicator.nc_send_receive_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_receive_data(&message, &server_addr)
     }
 
     /// This method sends a NCNodeMessage::NeedsData message to the server and reacts accordingly to the server response:
@@ -334,7 +338,7 @@ impl<T: NCNode> NodeProcess<T> {
                         self.sleep();
                         Ok(())
                     }
-                    _msg => {
+                    _ => {
                         // The server does not bother sending the node a NCJobStatus::Finished message.
                         error!("Error: unexpected message from server");
                         Err(NCError::ServerMsgMismatch)
@@ -345,6 +349,9 @@ impl<T: NCNode> NodeProcess<T> {
                 // Forward custom message to user code
                 self.nc_node.process_custom_message(&message);
                 Ok(())
+            }
+            NCServerMessage::NewServer(server, port) => {
+                self.new_server(server, port)
             }
             _ => {
                 error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch");
@@ -357,8 +364,9 @@ impl<T: NCNode> NodeProcess<T> {
     fn send_needs_data_message(&mut self) -> Result<NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT>, NCError> {
         debug!("NodeProcess::send_needs_data_message()");
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::NeedsData(self.node_id);
+        let server_addr = *self.server_addr.lock()?;
 
-        self.nc_communicator.nc_send_receive_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_receive_data(&message, &server_addr)
     }
 
     /// Process the new data from the server and sends the result back to the server using
@@ -367,8 +375,18 @@ impl<T: NCNode> NodeProcess<T> {
         debug!("NodeProcess::process_data_and_send_has_data_message()");
         let result = self.nc_node.process_data_from_server(data)?;
         let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::HasData(self.node_id, result);
+        let server_addr = *self.server_addr.lock()?;
 
-        self.nc_communicator.nc_send_data(&message, &self.server_addr)
+        self.nc_communicator.nc_send_data(&message, &server_addr)
+    }
+
+    /// Change settings for a new server
+    fn new_server(&mut self, server: String, port: u16) -> Result<(), NCError>{
+        // TODO: change settings
+        let ip_addr: IpAddr = server.parse()?;
+        let mut server_addr = self.server_addr.lock()?;
+        *server_addr = SocketAddr::new(ip_addr, port);
+        Ok(())
     }
 
     /// Returns the current value of the retry counter.
@@ -472,11 +490,12 @@ mod tests {
     #[test]
     fn test_nhb_dec_and_check_counter1() {
         let config = NCConfiguration::default();
+        let server_addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080);
+        let server_addr = Arc::new(Mutex::new(server_addr));
         let mut nhb = NodeHeartbeat::new(
-    SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                8080),
-        NodeID::unset(), &config);
+            server_addr, NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -496,11 +515,12 @@ mod tests {
     #[test]
     fn test_nhb_reset_counter() {
         let config = NCConfiguration::default();
+        let server_addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080);
+        let server_addr = Arc::new(Mutex::new(server_addr));
         let mut nhb = NodeHeartbeat::new(
-    SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                8080),
-        NodeID::unset(), &config);
+            server_addr, NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -517,11 +537,12 @@ mod tests {
     fn test_np_dec_and_check_counter() {
         let nc_node = TestNode{};
         let config = NCConfiguration::default();
+        let server_addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080);
+        let server_addr = Arc::new(Mutex::new(server_addr));
         let mut np = NodeProcess::new(
-        SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                  8080),
-            nc_node, &config);
+            server_addr, nc_node, &config);
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());
@@ -542,11 +563,13 @@ mod tests {
     fn test_np_reset_counter() {
         let nc_node = TestNode{};
         let config = NCConfiguration::default();
+        let server_addr = SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080);
+        let server_addr = Arc::new(Mutex::new(server_addr));
         let mut np = NodeProcess::new(
-        SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                  8080),
-            nc_node, &config);
+            server_addr, nc_node, &config);
+
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());
