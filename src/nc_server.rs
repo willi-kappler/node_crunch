@@ -332,6 +332,7 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
                 debug!("Node {} needs data to process", node_id);
 
                 if let Some((server, port)) = self.new_server.lock()?.clone() {
+                    self.node_list.lock()?.remove_node(node_id);
                     return self.send_new_server_message(server, port, stream)
                 }
 
@@ -399,6 +400,10 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
                 debug!("Move all nodes to a new server, address: {}, port: {}", server, port);
                 let mut new_server = self.new_server.lock()?;
                 *new_server = Some((server, port));
+            }
+            NCNodeMessage::NodeMigrated(node_id) => {
+                debug!("Register migrated node: {}", node_id);
+                self.node_list.lock()?.migrate_node(node_id);
             }
             NCNodeMessage::CustomMessage(message, destination) => {
                 match destination {

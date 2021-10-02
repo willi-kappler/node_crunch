@@ -3,6 +3,7 @@
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
 use std::collections::VecDeque;
+use std::ops::Index;
 use std::time::Instant;
 use std::fmt::{self, Display, Formatter};
 
@@ -147,7 +148,7 @@ impl<U: Clone> NCNodeList<U> {
         }).collect()
     }
 
-    /// Add a new message for the given node
+    /// Add a new message for the given node.
     pub(crate) fn add_message(&mut self, message: U, node_id: NodeID) {
         for node in self.nodes.iter_mut() {
             if node.node_id == node_id {
@@ -157,14 +158,14 @@ impl<U: Clone> NCNodeList<U> {
         }
     }
 
-    /// Add a new message for all nodes
+    /// Add a new message for all nodes.
     pub(crate) fn add_message_all(&mut self, message: U) {
         for node in self.nodes.iter_mut() {
             node.add_message(message.clone());
         }
     }
 
-    /// Get first message for the given node id, if any
+    /// Get first message for the given node id, if any.
     pub(crate) fn get_message(&mut self, node_id: NodeID) -> Option<U> {
         for node in self.nodes.iter_mut() {
             if node.node_id == node_id {
@@ -173,6 +174,18 @@ impl<U: Clone> NCNodeList<U> {
         }
 
         return None
+    }
+
+    /// Remove a node from the current (old) server because it will
+    /// migrate to a new server.
+    pub(crate) fn remove_node(&mut self, node_id: NodeID) {
+        let i = self.nodes.iter().position(|node| node.node_id == node_id).unwrap();
+        self.nodes.swap_remove(i);
+    }
+
+    /// Migrate node to new server -> register a new node id.
+    pub(crate) fn migrate_node(&mut self, node_id: NodeID) {
+        self.nodes.push(NCNodeInfo::new(node_id))
     }
 }
 

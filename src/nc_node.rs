@@ -39,6 +39,8 @@ pub(crate) enum NCNodeMessage<ProcessedDataT, CustomMessageT> {
     ShutDown,
     /// Move all the nodes to a new server given by address and port
     NewServer(String, u16),
+    /// Register migrated node to new server
+    NodeMigrated(NodeID),
     /// Send a custom message to one or all nodes
     CustomMessage(CustomMessageT, Option<NodeID>),
     // More items may be added in the future
@@ -351,7 +353,8 @@ impl<T: NCNode> NodeProcess<T> {
                 Ok(())
             }
             NCServerMessage::NewServer(server, port) => {
-                self.new_server(server, port)
+                self.new_server(server, port);
+                self.send_node_migrated()
             }
             _ => {
                 error!("Error in process_data_and_send_has_data_message(), NCServerMessage mismatch");
@@ -382,11 +385,21 @@ impl<T: NCNode> NodeProcess<T> {
 
     /// Change settings for a new server
     fn new_server(&mut self, server: String, port: u16) -> Result<(), NCError>{
-        // TODO: change settings
+        debug!("NodeProcess::new_server()");
         let ip_addr: IpAddr = server.parse()?;
         let mut server_addr = self.server_addr.lock()?;
         *server_addr = SocketAddr::new(ip_addr, port);
         Ok(())
+    }
+
+    /// Send message to new server that the node has migrated
+    fn send_node_migrated(&mut self) -> Result<(), NCError> {
+        debug!("NodeProcess::send_node_migrated()");
+
+        let message: NCNodeMessage<T::ProcessedDataT, T::CustomMessageT> = NCNodeMessage::NodeMigrated(self.node_id);
+        let server_addr = *self.server_addr.lock()?;
+
+        self.nc_communicator.nc_send_data(&message, &server_addr)
     }
 
     /// Returns the current value of the retry counter.
