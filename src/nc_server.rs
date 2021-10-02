@@ -13,7 +13,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
-use std::collections::HashMap;
 
 use log::{error, info, debug};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
@@ -60,7 +59,7 @@ pub trait NCServer {
     type InitialDataT: Serialize + DeserializeOwned;
     type NewDataT: Serialize + DeserializeOwned;
     type ProcessedDataT: Serialize + DeserializeOwned;
-    type CustomMessageT: Serialize + DeserializeOwned + Send;
+    type CustomMessageT: Serialize + DeserializeOwned + Send + Clone;
 
     /// This method is called once for every new node that registers with the server using the NCNodeMessage::Register message.
     /// It may prepare some initial data that is common for all nodes at the beginning of the job.
@@ -259,11 +258,9 @@ struct NCServerProcess<T, U> {
     /// The user defined data structure that implements the NCServer trait.
     nc_server: Mutex<T>,
     /// Internal list of all the registered nodes.
-    node_list: Mutex<NCNodeList>,
+    node_list: Mutex<NCNodeList<U>>,
     /// Indicates if the job is already done and the server can exit its main loop.
     job_done: AtomicBool,
-    /// A mailbox for each node, contains special commands that should be sent to the nodes.
-    mailbox: Mutex<HashMap<NodeID, Vec<U>>>,
     /// Handles all the communication
     nc_communicator: Mutex<NCCommunicator>,
 }
@@ -280,7 +277,6 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             nc_server: Mutex::new(nc_server),
             node_list: Mutex::new(NCNodeList::new()),
             job_done: AtomicBool::new(false),
-            mailbox: Mutex::new(HashMap::new()),
             nc_communicator: Mutex::new(NCCommunicator::new(config)),
         }
     }
@@ -330,13 +326,9 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             NCNodeMessage::NeedsData(node_id) => {
                 debug!("Node {} needs data to process", node_id);
 
-                let mut mailbox = self.mailbox.lock()?;
-                let mailbox = mailbox.get_mut(&node_id);
-                if let Some(custom_messages) = mailbox {
-                    let custom_message = custom_messages.pop();
-                    if let Some(custom_message) = custom_message {
-                        return self.send_custom_message(custom_message, stream)
-                    }
+                if let Some(custom_message) = self.node_list.lock()?.get_message(node_id) {
+                    debug!("Send custom message to node: {}", node_id);
+                    return self.send_custom_message(custom_message, stream)
                 }
 
                 let data_for_node = self.nc_server.lock()?.prepare_data_for_node(node_id)?;
@@ -399,17 +391,14 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
 
             }
             NCNodeMessage::CustomMessage(message, destination) => {
-                let mut mailbox = self.mailbox.lock()?;
-
                 match destination {
                     Some(node_id) => {
-                        debug!("Send a custom message to node: {}", node_id);
-                        let entry = mailbox.entry(node_id).or_insert(Vec::new());
-                        entry.push(message);
+                        debug!("Add a custom message to node: {}", node_id);
+                        self.node_list.lock()?.add_message(message, node_id);
                     }
                     None => {
-                        debug!("Send a custom message to all nodes");
-
+                        debug!("Add a custom message to all nodes");
+                        self.node_list.lock()?.add_message_all(message);
                     }
                 }
             }

@@ -2,6 +2,7 @@
 //! NodeID is just a new type pattern for a integer number.
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
+use std::collections::VecDeque;
 use std::time::Instant;
 use std::fmt::{self, Display, Formatter};
 
@@ -11,20 +12,6 @@ use serde::{Serialize, Deserialize};
 /// New type pattern for the node id.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeID(u64);
-
-/// This data structure contains the node id and the time stamps for the heartbeat.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub(crate) struct NCNodeInfo {
-    /// The id of the node.
-    pub(crate) node_id: NodeID,
-    /// Time stamp for the node id since the last valid heartbeat.
-    pub(crate) instant: Instant,
-}
-
-pub(crate) struct NCNodeList {
-    /// List of all nodes that have been registered.
-    nodes: Vec<NCNodeInfo>,
-}
 
 impl NodeID {
     /// Create a new temporary node id that will be set later
@@ -44,25 +31,62 @@ impl Display for NodeID {
     }
 }
 
-impl NCNodeInfo {
+/// This data structure contains the node id and the time stamps for the heartbeat.
+#[derive(Debug, PartialEq)]
+pub(crate) struct NCNodeInfo<U> {
+    /// The id of the node.
+    node_id: NodeID,
+    /// Time stamp for the node id since the last valid heartbeat.
+    instant: Instant,
+    /// Message queue (FIFO) for messages that will be send to the node.
+    message_queue: VecDeque<U>,
+}
+
+impl<U> NCNodeInfo<U> {
     /// Create a new node info with the given node id and the current time stamp.
-    pub(crate) fn new(node_id: NodeID) -> Self {
-        NCNodeInfo{ node_id, instant: Instant::now() }
+    fn new(node_id: NodeID) -> Self {
+        NCNodeInfo {
+            node_id,
+            instant: Instant::now(),
+            message_queue: VecDeque::new(),
+        }
     }
 
     /// When a node sends a valid heartbeat update the time stamp for that node.
-    pub(crate) fn update_heartbeat(&mut self) {
+    fn update_heartbeat(&mut self) {
         self.instant = Instant::now();
     }
 
     /// Check if the heartbeat for the node is invalid using the given time range.
-    pub(crate) fn heartbeat_invalid(&self, limit: u64) -> bool {
+    fn heartbeat_invalid(&self, limit: u64) -> bool {
         let diff = Instant::now() - self.instant;
         diff.as_secs() > limit
     }
+
+    /// Add a new message to the message queue
+    fn add_message(&mut self, message: U) {
+        self.message_queue.push_back(message);
+        // If maximum number of messages in message queue is reached
+        // discard first message
+        if self.message_queue.len() > 10 {
+            self.message_queue.pop_front();
+        }
+    }
+
+    /// Get first message if any is available
+    fn get_message(&mut self) -> Option<U> {
+        self.message_queue.pop_front()
+    }
 }
 
-impl NCNodeList {
+pub(crate) struct NCNodeList<U> {
+    // TODO: Maybe use a hashmap instead of a vec ?
+    /// List of all nodes that have been registered.
+    nodes: Vec<NCNodeInfo<U>>,
+}
+
+impl<U: Clone> NCNodeList<U> {
+    /// Creates a new empty node list
     pub(crate) fn new() -> Self {
         NCNodeList { nodes: Vec::new() }
     }
@@ -122,6 +146,34 @@ impl NCNodeList {
             (node_info.node_id, node_info.instant.elapsed().as_secs_f64())
         }).collect()
     }
+
+    /// Add a new message for the given node
+    pub(crate) fn add_message(&mut self, message: U, node_id: NodeID) {
+        for node in self.nodes.iter_mut() {
+            if node.node_id == node_id {
+                node.add_message(message);
+                break
+            }
+        }
+    }
+
+    /// Add a new message for all nodes
+    pub(crate) fn add_message_all(&mut self, message: U) {
+        for node in self.nodes.iter_mut() {
+            node.add_message(message.clone());
+        }
+    }
+
+    /// Get first message for the given node id, if any
+    pub(crate) fn get_message(&mut self, node_id: NodeID) -> Option<U> {
+        for node in self.nodes.iter_mut() {
+            if node.node_id == node_id {
+                return node.get_message()
+            }
+        }
+
+        return None
+    }
 }
 
 #[cfg(test)]
@@ -133,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_heartbeat_invalid() {
-        let node_info = NCNodeInfo::new(NodeID::unset());
+        let node_info: NCNodeInfo<()> = NCNodeInfo::new(NodeID::unset());
 
         thread::sleep(Duration::from_secs(3));
 
@@ -146,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_update_heartbeat() {
-        let mut node_info = NCNodeInfo::new(NodeID::unset());
+        let mut node_info: NCNodeInfo<()> = NCNodeInfo::new(NodeID::unset());
 
         thread::sleep(Duration::from_secs(5));
 
@@ -159,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_register_new_node() {
-        let mut node_list = NCNodeList::new();
+        let mut node_list: NCNodeList<()> = NCNodeList::new();
 
         let node = node_list.register_new_node();
 
@@ -177,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_node_list_check_heartbeat() {
-        let mut node_list = NCNodeList::new();
+        let mut node_list: NCNodeList<()> = NCNodeList::new();
 
         let _ = node_list.register_new_node();
         let _ = node_list.register_new_node();
@@ -199,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_node_list_update_heartbeat() {
-        let mut node_list = NCNodeList::new();
+        let mut node_list: NCNodeList<()> = NCNodeList::new();
 
         let _ = node_list.register_new_node();
         let _ = node_list.register_new_node();
