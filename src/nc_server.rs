@@ -24,7 +24,7 @@ use crate::nc_config::NCConfiguration;
 use crate::nc_node_info::{NodeID, NCNodeList};
 use crate::nc_communicator::{NCCommunicator};
 
-/// This message is send from the server to each node. It can be some initial data, the job status or a heartbeat response.
+/// This message is send from the server to each node.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum NCServerMessage<InitialDataT, NewDataT, CustomMessageT> {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
@@ -33,8 +33,10 @@ pub(crate) enum NCServerMessage<InitialDataT, NewDataT, CustomMessageT> {
     /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus<NewDataT>),
-    /// Send some statistics about the server to the node
+    /// Send some statistics about the server to the node.
     Statistics(NCServerStatistics),
+    /// Move all nodes to a new server.
+    NewServer(String, u16),
     /// Send a custom message to one or all nodes.
     CustomMessage(CustomMessageT),
 }
@@ -261,6 +263,8 @@ struct NCServerProcess<T, U> {
     node_list: Mutex<NCNodeList<U>>,
     /// Indicates if the job is already done and the server can exit its main loop.
     job_done: AtomicBool,
+    /// Optional setting if nodes have to move to a new server
+    new_server: Mutex<Option<(String, u16)>>,
     /// Handles all the communication
     nc_communicator: Mutex<NCCommunicator>,
 }
@@ -277,6 +281,7 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             nc_server: Mutex::new(nc_server),
             node_list: Mutex::new(NCNodeList::new()),
             job_done: AtomicBool::new(false),
+            new_server: Mutex::new(None),
             nc_communicator: Mutex::new(NCCommunicator::new(config)),
         }
     }
@@ -325,6 +330,10 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             }
             NCNodeMessage::NeedsData(node_id) => {
                 debug!("Node {} needs data to process", node_id);
+
+                if let Some((server, port)) = self.new_server.lock()?.clone() {
+                    return self.send_new_server_message(server, port, stream)
+                }
 
                 if let Some(custom_message) = self.node_list.lock()?.get_message(node_id) {
                     debug!("Send custom message to node: {}", node_id);
@@ -386,9 +395,10 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
                 // Shut down server gracefully
                 self.shut_down();
             }
-            NCNodeMessage::MoveServer(address, port) => {
-                debug!("Move all nodes to a new server, address: {}, port: {}", address, port);
-
+            NCNodeMessage::NewServer(server, port) => {
+                debug!("Move all nodes to a new server, address: {}, port: {}", server, port);
+                let mut new_server = self.new_server.lock()?;
+                *new_server = Some((server, port));
             }
             NCNodeMessage::CustomMessage(message, destination) => {
                 match destination {
@@ -429,6 +439,7 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
 
         self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
+
     /// Send the NCServerMessage::Statistics to the node.
     fn send_server_statistics(&self, server_statistics: NCServerStatistics, mut stream: TcpStream) -> Result<(), NCError> {
         debug!("ServerProcess::send_server_statistics()");
@@ -436,9 +447,18 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
 
         self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
     }
+
+    /// Send the NCServerMessage::NewServer message to the node.
+    fn send_new_server_message(&self, server: String, port: u16, mut stream: TcpStream) -> Result<(), NCError> {
+        debug!("ServerProcess::send_new_server_message()");
+        let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::NewServer(server, port);
+
+        self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)
+    }
+
     /// Send the NCServerMessage::Command message to the node.
     fn send_custom_message(&self, custom_message: T::CustomMessageT, mut stream: TcpStream) -> Result<(), NCError> {
-        debug!("ServerProcess::send_command()");
+        debug!("ServerProcess::send_custom_message()");
         let message: NCServerMessage<T::InitialDataT, T::NewDataT, T::CustomMessageT> = NCServerMessage::CustomMessage(custom_message);
 
         self.nc_communicator.lock()?.nc_send_data2(&message, &mut stream)

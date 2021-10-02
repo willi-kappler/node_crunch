@@ -37,7 +37,7 @@ pub(crate) enum NCNodeMessage<ProcessedDataT, CustomMessageT> {
     /// Tell the server to shut down
     ShutDown,
     /// Move all the nodes to a new server given by address and port
-    MoveServer(String, u16),
+    NewServer(String, u16),
     /// Send a custom message to one or all nodes
     CustomMessage(CustomMessageT, Option<NodeID>),
     // More items may be added in the future
