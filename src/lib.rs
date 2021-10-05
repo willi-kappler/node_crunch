@@ -6,7 +6,10 @@
 
 // TODO:
 // Examples to add:
-// - Add an example with https://github.com/wahn/rs_pbrt, https://github.com/TwinkleBear/tray_rust
+// - Add an example with
+//   - https://github.com/wahn/rs_pbrt
+//   - https://github.com/TwinkleBear/tray_rust
+//   - https://github.com/alesgenova/ray-tracer
 // - Distributed machine learning ?
 // - Distributed black hole simulation ?
 // - Distributed crypto mining ?
