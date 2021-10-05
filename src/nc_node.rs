@@ -353,7 +353,7 @@ impl<T: NCNode> NodeProcess<T> {
                 Ok(())
             }
             NCServerMessage::NewServer(server, port) => {
-                self.new_server(server, port);
+                self.new_server(server, port)?;
                 self.send_node_migrated()
             }
             _ => {
@@ -500,15 +500,16 @@ mod tests {
         }
     }
 
+    fn server_addr_for_test() -> Arc<Mutex<SocketAddr>> {
+        let server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        Arc::new(Mutex::new(server_addr))
+    }
+
     #[test]
     fn test_nhb_dec_and_check_counter1() {
         let config = NCConfiguration::default();
-        let server_addr = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080);
-        let server_addr = Arc::new(Mutex::new(server_addr));
-        let mut nhb = NodeHeartbeat::new(
-            server_addr, NodeID::unset(), &config);
+        let server_addr = server_addr_for_test();
+        let mut nhb = NodeHeartbeat::new(server_addr, NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -528,12 +529,8 @@ mod tests {
     #[test]
     fn test_nhb_reset_counter() {
         let config = NCConfiguration::default();
-        let server_addr = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080);
-        let server_addr = Arc::new(Mutex::new(server_addr));
-        let mut nhb = NodeHeartbeat::new(
-            server_addr, NodeID::unset(), &config);
+        let server_addr = server_addr_for_test();
+        let mut nhb = NodeHeartbeat::new(server_addr, NodeID::unset(), &config);
 
         assert_eq!(nhb.get_counter(), 5);
         assert!(!nhb.dec_and_check_counter());
@@ -550,12 +547,8 @@ mod tests {
     fn test_np_dec_and_check_counter() {
         let nc_node = TestNode{};
         let config = NCConfiguration::default();
-        let server_addr = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080);
-        let server_addr = Arc::new(Mutex::new(server_addr));
-        let mut np = NodeProcess::new(
-            server_addr, nc_node, &config);
+        let server_addr = server_addr_for_test();
+        let mut np = NodeProcess::new(server_addr, nc_node, &config);
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());
@@ -576,13 +569,8 @@ mod tests {
     fn test_np_reset_counter() {
         let nc_node = TestNode{};
         let config = NCConfiguration::default();
-        let server_addr = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080);
-        let server_addr = Arc::new(Mutex::new(server_addr));
-        let mut np = NodeProcess::new(
-            server_addr, nc_node, &config);
-
+        let server_addr = server_addr_for_test();
+        let mut np = NodeProcess::new(server_addr, nc_node, &config);
 
         assert_eq!(np.get_counter(), 5);
         assert!(!np.dec_and_check_counter());

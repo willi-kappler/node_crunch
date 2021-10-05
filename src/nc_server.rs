@@ -55,7 +55,6 @@ pub enum NCJobStatus<NewDataT> {
     Finished,
 }
 
-// TODO: Generic trait, U for data in, V for data out
 /// This is the trait that you have to implement in order to start the server.
 pub trait NCServer {
     type InitialDataT: Serialize + DeserializeOwned;

@@ -3,7 +3,6 @@
 //! NCNodeInfo holds the node id and a time stamp for the heartbeat.
 
 use std::collections::VecDeque;
-use std::ops::Index;
 use std::time::Instant;
 use std::fmt::{self, Display, Formatter};
 

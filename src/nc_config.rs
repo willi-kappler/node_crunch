@@ -23,7 +23,7 @@ pub struct NCConfiguration{
     pub compress: bool,
     /// Enable encryption during communication
     pub encrypt: bool,
-    /// Encryption key
+    /// Encryption key, must be exactly 32 chars
     pub key: String,
 }
 
@@ -38,6 +38,7 @@ impl Default for NCConfiguration {
             pool_size: 8,
             compress: true,
             encrypt: false,
+            // Key must be exactly 32 chars long
             key: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX".to_string(),
         }
     }
