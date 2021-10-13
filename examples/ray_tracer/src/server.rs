@@ -96,7 +96,7 @@ impl NCServer for RayTracerServer {
 
     /// If some nodes have crashed or lost the network connection the internal chunks list is updated.
     fn heartbeat_timeout(&mut self, nodes: Vec<NodeID>) {
-        // TODO: handle broken node
+        self.chunk_list.heartbeat_timeout(&nodes)
     }
 
     /// When all processing is done the server calls this method. Here we just save the final image to disk.
@@ -116,21 +116,22 @@ pub fn run_server(options: RayTracer1Opt) {
         ..Default::default()
     };
 
-    let width = 1024;
-    let height = 768;
-    let chunk_size = 64;
-
-    let array2d_chunk = Array2DChunk::new(width, height, chunk_size, chunk_size, (0, 0, 0));
+    let array2d_chunk = Array2DChunk::new(options.width, options.height, options.chunk_size, options.chunk_size, (0, 0, 0));
     let mut chunk_list = ChunkList::new();
+    chunk_list.initialize(&array2d_chunk);
 
+    /*
     for i in 0..array2d_chunk.num_of_chunks() {
         let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
 
         chunk_list.push(ChunkData { x, y, width, height });
     }
+    */
 
     let server = RayTracerServer {
-        width, height, array2d_chunk, chunk_list,
+        width: options.width,
+        height: options.height,
+        array2d_chunk, chunk_list,
     };
 
     let mut server_starter = NCServerStarter::new(configuration);

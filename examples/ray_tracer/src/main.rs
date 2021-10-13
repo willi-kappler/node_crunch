@@ -9,6 +9,7 @@ use node_crunch::Array2D;
 
 mod server;
 mod node;
+mod ray_scene;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "ray_tracer1")]
@@ -21,6 +22,18 @@ pub struct RayTracer1Opt {
 
     #[structopt(short = "p", long = "port", default_value = "2020")]
     port: u16,
+
+    #[structopt(default_value = "1024")]
+    width: u64,
+
+    #[structopt(default_value = "768")]
+    height: u64,
+
+    #[structopt(default_value = "64")]
+    chunk_size: u64,
+
+    #[structopt(default_value = "2.0")]
+    gamma: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
