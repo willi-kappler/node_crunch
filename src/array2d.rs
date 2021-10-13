@@ -271,6 +271,16 @@ impl<T> ChunkList<T> {
     }
 }
 
+impl ChunkList<ChunkData> {
+    pub fn initialize<T: Clone + Copy>(&mut self, array2d_chunk: &Array2DChunk<T>) {
+        for i in 0..array2d_chunk.num_of_chunks() {
+            let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
+
+            self.push(ChunkData { x, y, width, height });
+        }
+    }
+}
+
 /// This is the data that is stored in the chunks list.
 #[derive(Debug, Clone)]
 pub struct ChunkData {

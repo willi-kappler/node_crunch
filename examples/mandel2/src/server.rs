@@ -136,12 +136,7 @@ pub fn run_server(options: Mandel1Opt) {
     let chunk_size = 2000;
     let array2d_chunk = Array2DChunk::new(img_size, img_size, chunk_size, chunk_size, 0);
     let mut chunk_list = ChunkList::new();
-
-    for i in 0..array2d_chunk.num_of_chunks() {
-        let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
-
-        chunk_list.push(ChunkData { x, y, width, height });
-    }
+    chunk_list.initialize(&array2d_chunk);
 
     let server = MandelServer {
         start, end, x_step, y_step, max_iter, array2d_chunk, chunk_list,
