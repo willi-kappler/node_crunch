@@ -34,7 +34,7 @@ struct MandelServer {
     /// Maximum number of iteration as escape time limit.
     max_iter: u32,
     /// This holds the image data (pixels) for the final mandelbrot image.
-    array2d_chunk: Array2DChunk::<u32>,
+    array2d_chunk: Array2DChunk<u32>,
     /// Book keeping chunk list, which node is processing which part of the image.
     chunk_list: ChunkList<ChunkData>,
 }
@@ -151,7 +151,7 @@ pub fn run_server(options: Mandel1Opt) {
     let x_step = (end.re - start.re) / (img_size as f64);
     let y_step = (end.im - start.im) / (img_size as f64);
     let chunk_size = 2000;
-    let array2d_chunk = Array2DChunk::<u32>::new(img_size, img_size, chunk_size, chunk_size, 0);
+    let array2d_chunk = Array2DChunk::new(img_size, img_size, chunk_size, chunk_size, 0);
     let mut chunk_list = ChunkList::new();
 
     for i in 0..array2d_chunk.num_of_chunks() {
