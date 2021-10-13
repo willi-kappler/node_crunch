@@ -26,7 +26,7 @@ impl NCNode for RayTracerNode {
     type CustomMessageT = ();
 
     /// This processes the data that has been send from the server to this node.
-    /// In here the whole number crunching is happening in this example the mandelbrot set.
+    /// In here the whole number crunching is happening in this example the ray tracing image.
     /// The result is returned in a Ok(Self::ProcessedDataT).
     /// Return an error otherwise.
     fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError> {
@@ -34,13 +34,13 @@ impl NCNode for RayTracerNode {
 
         let renderer = Renderer::new(
             data.x as usize,
-            data.width as usize,
+            (data.x + data.width) as usize,
             data.y as usize,
-            data.height as usize,
+            (data.y + data.height) as usize,
             self.width as usize,
             self.height as usize,
             0, 2, false);
-        let image = renderer.render(&mut self.scene, &self.camera);
+        let image = renderer.render(&self.scene, &self.camera);
 
         // TODO: calculate scene
         for x in 0..data.width {
