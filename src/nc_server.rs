@@ -256,12 +256,12 @@ struct NCServerProcess<T, U> {
     heartbeat: u64,
     /// Time instance when the server was created
     time_start: Instant,
+    /// Indicates if the job is already done and the server can exit its main loop.
+    job_done: AtomicBool,
     /// The user defined data structure that implements the NCServer trait.
     nc_server: Mutex<T>,
     /// Internal list of all the registered nodes.
     node_list: Mutex<NCNodeList<U>>,
-    /// Indicates if the job is already done and the server can exit its main loop.
-    job_done: AtomicBool,
     /// Optional setting if nodes have to move to a new server
     new_server: Mutex<Option<(String, u16)>>,
     /// Handles all the communication
@@ -277,9 +277,9 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             port: config.port,
             heartbeat: config.heartbeat,
             time_start: Instant::now(),
+            job_done: AtomicBool::new(false),
             nc_server: Mutex::new(nc_server),
             node_list: Mutex::new(NCNodeList::new()),
-            job_done: AtomicBool::new(false),
             new_server: Mutex::new(None),
             nc_communicator: Mutex::new(NCCommunicator::new(config)),
         }
@@ -322,25 +322,31 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
 
         match request {
             NCNodeMessage::Register => {
-                let node_id = self.node_list.lock()?.register_new_node();
-                let initial_data = self.nc_server.lock()?.initial_data()?;
+                let mut node_list = self.node_list.lock()?;
+                let mut nc_server = self.nc_server.lock()?;
+
+                let node_id = node_list.register_new_node();
+                let initial_data = nc_server.initial_data()?;
                 info!("Registering new node: {}, {}", node_id, stream.peer_addr()?);
                 self.send_initial_data_message(node_id, initial_data, stream)?;
             }
             NCNodeMessage::NeedsData(node_id) => {
                 debug!("Node {} needs data to process", node_id);
+                let new_server = self.new_server.lock()?;
+                let mut node_list = self.node_list.lock()?;
+                let mut nc_server = self.nc_server.lock()?;
 
-                if let Some((server, port)) = self.new_server.lock()?.clone() {
+                if let Some((server, port)) = new_server.clone() {
                     self.node_list.lock()?.remove_node(node_id);
                     return self.send_new_server_message(server, port, stream)
                 }
 
-                if let Some(custom_message) = self.node_list.lock()?.get_message(node_id) {
+                if let Some(custom_message) = node_list.get_message(node_id) {
                     debug!("Send custom message to node: {}", node_id);
                     return self.send_custom_message(custom_message, stream)
                 }
 
-                let data_for_node = self.nc_server.lock()?.prepare_data_for_node(node_id)?;
+                let data_for_node = nc_server.prepare_data_for_node(node_id)?;
 
                 match data_for_node {
                     NCJobStatus::Unfinished(data) => {
@@ -362,25 +368,34 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             }
             NCNodeMessage::HeartBeat(node_id) => {
                 debug!("Got heartbeat from node: {}", node_id);
-                self.node_list.lock()?.update_heartbeat(node_id);
+                let mut node_list = self.node_list.lock()?;
+
+                node_list.update_heartbeat(node_id);
             }
             NCNodeMessage::HasData(node_id, data) => {
                 debug!("Node {} has processed some data and we received the results", node_id);
-                self.nc_server.lock()?.process_data_from_node(node_id, &data)?;
+                let mut nc_server = self.nc_server.lock()?;
+
+                nc_server.process_data_from_node(node_id, &data)?;
             }
             NCNodeMessage::CheckHeartbeat => {
                 debug!("Message CheckHeartbeat received!");
                 // Check the heartbeat for all the nodes and call the trait method heartbeat_timeout()
                 // with those nodes to react accordingly.
-                let nodes = self.node_list.lock()?.check_heartbeat(self.heartbeat).collect::<Vec<NodeID>>();
-                self.nc_server.lock()?.heartbeat_timeout(nodes);
+                let node_list = self.node_list.lock()?;
+                let mut nc_server = self.nc_server.lock()?;
+
+                let nodes = node_list.check_heartbeat(self.heartbeat).collect::<Vec<NodeID>>();
+                nc_server.heartbeat_timeout(nodes);
             }
             NCNodeMessage::GetStatistics => {
                 debug!("Statistics requested");
                 // Gather some statistics and send it to the node that requested it
-                let num_of_nodes = self.node_list.lock()?.len();
+                let node_list = self.node_list.lock()?;
+
+                let num_of_nodes = node_list.len();
                 let time_taken = self.calc_total_time();
-                let hb_time_stamps = self.node_list.lock()?.get_time_stamps();
+                let hb_time_stamps = node_list.get_time_stamps();
 
                 let server_statistics = NCServerStatistics{
                     num_of_nodes,
@@ -398,21 +413,26 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
             NCNodeMessage::NewServer(server, port) => {
                 debug!("Move all nodes to a new server, address: {}, port: {}", server, port);
                 let mut new_server = self.new_server.lock()?;
+
                 *new_server = Some((server, port));
             }
             NCNodeMessage::NodeMigrated(node_id) => {
                 debug!("Register migrated node: {}", node_id);
-                self.node_list.lock()?.migrate_node(node_id);
+                let mut node_list = self.node_list.lock()?;
+
+                node_list.migrate_node(node_id);
             }
             NCNodeMessage::CustomMessage(message, destination) => {
+                let mut node_list = self.node_list.lock()?;
+
                 match destination {
                     Some(node_id) => {
                         debug!("Add a custom message to node: {}", node_id);
-                        self.node_list.lock()?.add_message(message, node_id);
+                        node_list.add_message(message, node_id);
                     }
                     None => {
                         debug!("Add a custom message to all nodes");
-                        self.node_list.lock()?.add_message_all(message);
+                        node_list.add_message_all(message);
                     }
                 }
             }
