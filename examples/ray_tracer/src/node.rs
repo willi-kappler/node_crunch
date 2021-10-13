@@ -1,4 +1,4 @@
-use log::{info, error};
+use log::{info, error, debug};
 
 use node_crunch::{NCNode, NCError, NCConfiguration, Array2D, NCNodeStarter};
 
@@ -31,6 +31,7 @@ impl NCNode for RayTracerNode {
     /// Return an error otherwise.
     fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError> {
         let mut array2d = Array2D::<(u8, u8, u8)>::new(data.width, data.height, (0, 0, 0));
+        debug!("Data from server: chunk: {}, x: {}, y: {}, w: {}, h: {}", data.chunk_id, data.x, data.y, data.width, data.height);
 
         let renderer = Renderer::new(
             data.x as usize,
@@ -39,13 +40,12 @@ impl NCNode for RayTracerNode {
             (data.y + data.height) as usize,
             self.width as usize,
             self.height as usize,
-            0, 2, false);
+            200, 16, true);
         let image = renderer.render(&self.scene, &self.camera);
 
-        // TODO: calculate scene
         for x in 0..data.width {
             for y in 0..data.height {
-                let index = (y * (image.width as u64) + x) as usize;
+                let index = (y * data.width + x) as usize;
                 let r = (image.data[3 * index].powf(1.0 / self.gamma) * 255.0) as u8;
                 let g = (image.data[3 * index + 1].powf(1.0 / self.gamma) * 255.0) as u8;
                 let b = (image.data[3 * index + 2].powf(1.0 / self.gamma) * 255.0) as u8;

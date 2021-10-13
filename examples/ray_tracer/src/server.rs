@@ -50,7 +50,7 @@ impl NCServer for RayTracerServer {
     type CustomMessageT = ();
 
     /// Every node needs some data to process. Here this data is prepared for each node and some book keeping is saved in the chunks list.
-    /// The whole mandelbrot image is split up into equally sized pieces and processed separately.
+    /// The whole ray tracing image is split up into equally sized pieces and processed separately.
     /// Returns the NCJobStatus that is checked by the server.
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewDataT>, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
@@ -67,6 +67,7 @@ impl NCServer for RayTracerServer {
 
             free_chunk.set_processing(node_id);
             debug!("preparing chunk {} for node {}", i, node_id);
+            debug!("x: {}, y: {}, w: {}, h: {}", data_for_node.x, data_for_node.y, data_for_node.width, data_for_node.height);
             Ok(NCJobStatus::Unfinished(data_for_node))
         } else {
             if self.is_job_done() {
@@ -84,6 +85,13 @@ impl NCServer for RayTracerServer {
         let chunk_id = node_data.chunk_id;
         let source = &node_data.img;
         let current_chunk = &mut self.chunk_list.get(chunk_id as usize);
+        let chunk_data = &current_chunk.data;
+
+        debug!("chunk_id: {}", chunk_id);
+        debug!("x: {}, y: {}, width: {}, height: {}", chunk_data.x, chunk_data.y, chunk_data.width, chunk_data.height);
+
+        let (cx, cy, cw, ch) = self.array2d_chunk.get_chunk_property(chunk_id);
+        debug!("cx: {}, cy: {}, cw: {}, ch: {}", cx, cy, cw, ch);
 
         if current_chunk.is_processing(node_id) {
             current_chunk.set_finished();
@@ -120,13 +128,11 @@ pub fn run_server(options: RayTracer1Opt) {
     let mut chunk_list = ChunkList::new();
     chunk_list.initialize(&array2d_chunk);
 
-    /*
     for i in 0..array2d_chunk.num_of_chunks() {
-        let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
-
-        chunk_list.push(ChunkData { x, y, width, height });
+        let chunk = chunk_list.get(i as usize);
+        let chunk_data = &chunk.data;
+        debug!("i: {}, node_id: {}, x: {}, y: {}, w: {}, h: {}", i, chunk.node_id, chunk_data.x, chunk_data.y, chunk_data.width, chunk_data.height);
     }
-    */
 
     let server = RayTracerServer {
         width: options.width,
