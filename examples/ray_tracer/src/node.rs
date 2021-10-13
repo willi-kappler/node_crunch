@@ -1,4 +1,4 @@
-use log::{info, error, debug};
+use log::{info, error};
 
 use node_crunch::{NCNode, NCError, NCConfiguration, Array2D, NCNodeStarter};
 

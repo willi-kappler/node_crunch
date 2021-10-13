@@ -85,7 +85,7 @@ impl NCServer for RayTracerServer {
         let chunk_id = node_data.chunk_id;
         let source = &node_data.img;
         let current_chunk = &mut self.chunk_list.get(chunk_id as usize);
-        let chunk_data = &current_chunk.data;
+        // let chunk_data = &current_chunk.data;
 
         debug!("chunk_id: {}", chunk_id);
         // debug!("x: {}, y: {}, width: {}, height: {}", chunk_data.x, chunk_data.y, chunk_data.width, chunk_data.height);

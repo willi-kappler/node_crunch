@@ -18,12 +18,7 @@ use ray_tracer::material::lambertian::LambertianMaterial;
 use ray_tracer::material::metal::MetalMaterial;
 use ray_tracer::material::dielectric::DielectricMaterial;
 use ray_tracer::actor::Actor;
-
-use rand::Rng;
-
-
 pub struct RayScene {
-
 }
 
 impl RayScene {
@@ -49,10 +44,10 @@ impl RayScene {
         const MIN_RADIUS : f64 = 0.2;
         const MAX_RADIUS : f64 = 0.4;
 
-        const SPHERE_PROBABILITY : f64 = 0.66666666;
+        // const SPHERE_PROBABILITY : f64 = 0.66666666;
 
-        const LAMBERTIAN_PROBABILITY : f64 = 0.3333;
-        const METAL_PROBABILITY : f64 = 0.3333;
+        // const LAMBERTIAN_PROBABILITY : f64 = 0.3333;
+        // const METAL_PROBABILITY : f64 = 0.3333;
 
         const MIN_FUZZINESS : f64 = 0.0;
         const MAX_FUZZINESS : f64 = 0.4;
@@ -60,18 +55,15 @@ impl RayScene {
         const MIN_REFRACTIVE : f64 = 1.2;
         const MAX_REFRACTIVE : f64 = 2.4;
 
-        let mut rng = rand::thread_rng();
-
         for i in 0..N_SPHERES_X {
             for j in 0..N_SPHERES_Y {
-                let radius = MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * rng.gen::<f64>();
-                let mut x = i as f64 + rng.gen::<f64>() * (1.0 - radius);
+                let radius = MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * 0.5;
+                let mut x = i as f64 + 0.5 * (1.0 - radius);
                 x = MIN_X + (MAX_X - MIN_X) * x / N_SPHERES_X as f64;
-                let mut y = j as f64 + rng.gen::<f64>() * (1.0 - radius);
+                let mut y = j as f64 + 0.5 * (1.0 - radius);
                 y = MIN_Y + (MAX_Y - MIN_Y) * y / N_SPHERES_Y as f64;
 
-                let hitable_select = rng.gen::<f64>();
-                let hitable : Box<dyn Hitable<f64>> = if hitable_select < SPHERE_PROBABILITY {
+                let hitable : Box<dyn Hitable<f64>> = if i < (N_SPHERES_X / 2) {
                     let hitable = Box::new(Sphere::<f64>::new(radius));
                     Box::new(Translation::new(hitable, Vec3::from_array([x, y, radius])))
                 } else {
@@ -80,16 +72,15 @@ impl RayScene {
                     Box::new(Translation::new(hitable, Vec3::from_array([x, y, radius * 0.8])))
                 };
 
-                let color = Vec3::from_array([rng.gen::<f64>(), rng.gen::<f64>(), rng.gen::<f64>()]);
+                let color = Vec3::from_array([(i as f64) / (N_SPHERES_X as f64), (j as f64) / (N_SPHERES_Y as f64), 0.5]);
                 let texture = Box::new(UniformTexture::new(color));
-                let material_select = rng.gen::<f64>();
-                let material : Box<dyn Material<f64>> = if material_select < LAMBERTIAN_PROBABILITY {
+                let material : Box<dyn Material<f64>> = if j < (N_SPHERES_Y / 2) {
                     Box::new(LambertianMaterial::<f64>::new(texture, 0.5))
-                } else if material_select < LAMBERTIAN_PROBABILITY + METAL_PROBABILITY {
-                    let fuzziness = MIN_FUZZINESS + (MAX_FUZZINESS - MIN_FUZZINESS) * rng.gen::<f64>();
+                } else if i < (N_SPHERES_X / 2) {
+                    let fuzziness = MIN_FUZZINESS + (MAX_FUZZINESS - MIN_FUZZINESS) * 0.5;
                     Box::new(MetalMaterial::<f64>::new(texture, fuzziness))
                 } else {
-                    let n = MIN_REFRACTIVE + (MAX_REFRACTIVE - MIN_REFRACTIVE) * rng.gen::<f64>();
+                    let n = MIN_REFRACTIVE + (MAX_REFRACTIVE - MIN_REFRACTIVE) * 0.5;
                     Box::new(DielectricMaterial::<f64>::new(texture, n))
                 };
                 let actor = Actor::<f64> { hitable, material};
