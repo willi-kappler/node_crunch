@@ -31,7 +31,7 @@ impl NCNode for RayTracerNode {
     /// Return an error otherwise.
     fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError> {
         let mut array2d = Array2D::<(u8, u8, u8)>::new(data.width, data.height, (0, 0, 0));
-        debug!("Data from server: chunk: {}, x: {}, y: {}, w: {}, h: {}", data.chunk_id, data.x, data.y, data.width, data.height);
+        // debug!("Data from server: chunk: {}, x: {}, y: {}, w: {}, h: {}", data.chunk_id, data.x, data.y, data.width, data.height);
 
         let renderer = Renderer::new(
             data.x as usize,
