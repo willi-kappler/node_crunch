@@ -271,6 +271,19 @@ impl<T> ChunkList<T> {
     }
 }
 
+/// This is the data that is stored in the chunks list.
+#[derive(Debug, Clone)]
+pub struct ChunkData {
+    /// X position of the chunk inside the Array2D = x position in the final image.
+    pub x: u64,
+    /// A position of the chunk inside the Array2D = y position in the final image.
+    pub y: u64,
+    /// width of the chunk inside the Array2D.
+    pub width: u64,
+    /// height of the chunk inside the Array2D.
+    pub height: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

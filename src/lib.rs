@@ -31,4 +31,4 @@ pub use nc_node::{NCNode, NCNodeStarter};
 pub use nc_node_info::NodeID;
 pub use nc_error::NCError;
 pub use nc_config::NCConfiguration;
-pub use array2d::{Array2D, Array2DChunk, ChunkList, Chunk};
+pub use array2d::{Array2D, Array2DChunk, ChunkList, Chunk, ChunkData};

@@ -3,22 +3,9 @@ use num::complex::Complex64;
 use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
-    Array2DChunk, ChunkList, NodeID, NCServerStarter};
+    Array2DChunk, ChunkList, ChunkData, NodeID, NCServerStarter};
 
 use crate::{Mandel1Opt, ServerData, NodeData};
-
-/// This is the data that is stores in the chunks list.
-#[derive(Debug, Clone)]
-struct ChunkData {
-    /// X position of the chunk inside the Array2D = x position in the final image.
-    x: u64,
-    /// A position of the chunk inside the Array2D = y position in the final image.
-    y: u64,
-    /// width of the chunk inside the Array2D.
-    width: u64,
-    /// height of the chunk inside the Array2D.
-    height: u64,
-}
 
 /// This has the image data, mandelbrot set configuration and the chunks list.
 #[derive(Debug, Clone)]
