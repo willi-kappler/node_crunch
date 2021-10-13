@@ -1,6 +1,6 @@
 use log::{info, error};
 
-use node_crunch::{NCNode, NCError, NCConfiguration, NCNodeStarter};
+use node_crunch::{NCNode, NCError, NCConfiguration, Array2D, NCNodeStarter};
 
 use crate::{RayTracer1Opt, ServerData, NodeData};
 
@@ -21,10 +21,19 @@ impl NCNode for RayTracerNode {
     /// The result is returned in a Ok(Self::ProcessedDataT).
     /// Return an error otherwise.
     fn process_data_from_server(&mut self, data: &Self::NewDataT) -> Result<Self::ProcessedDataT, NCError> {
+        let mut array2d = Array2D::<(u8, u8, u8)>::new(data.width, data.height, (0, 0, 0));
+
+
+
         // TODO: calculate scene
+        for x in 0..data.width {
+            for y in 0..data.height {
+            }
+        }
+
         let result = NodeData {
-            chunk_id: 0,
-            img: true,
+            chunk_id: data.chunk_id,
+            img: array2d,
         };
 
         Ok(result)

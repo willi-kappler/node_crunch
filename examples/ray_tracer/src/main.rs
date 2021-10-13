@@ -5,6 +5,8 @@ use structopt::StructOpt;
 use log4rs;
 use serde::{Serialize, Deserialize};
 
+use node_crunch::Array2D;
+
 mod server;
 mod node;
 
@@ -24,16 +26,16 @@ pub struct RayTracer1Opt {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerData {
     chunk_id: u64,
-    x0: usize,
-    x1: usize,
-    y0: usize,
-    y1: usize,
+    x: u64,
+    y: u64,
+    width: u64,
+    height: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeData {
     chunk_id: u64,
-    img: bool, // TODO: change this to a proper image type
+    img: Array2D<(u8, u8, u8)>,
 }
 
 fn create_logger(filename: &str) {

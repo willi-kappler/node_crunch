@@ -1,34 +1,45 @@
 use log::{info, error, debug};
-use image::{RgbImage, Rgb};
+use image;
 
 use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
-    NodeID, NCServerStarter};
+    Array2DChunk, ChunkList, ChunkData, NodeID, NCServerStarter};
 
 use crate::{RayTracer1Opt, ServerData, NodeData};
-
 
 /// This contains teh final image and the list of chunks
 #[derive(Debug, Clone)]
 struct RayTracerServer {
-    width: usize,
-    height: usize,
+    /// Width of the final image
+    width: u64,
+    /// Height of the final image
+    height: u64,
+    /// This holds the image data (pixels) for the final mandelbrot image.
+    array2d_chunk: Array2DChunk<(u8, u8, u8)>,
+    /// Book keeping chunk list, which node is processing which part of the image.
+    chunk_list: ChunkList<ChunkData>,
 }
 
 impl RayTracerServer {
     /// Saves the image data to disk with a fancy color scheme.
     fn save_image(&self) {
-        let mut buffer = RgbImage::new(self.width as u32, self.height as u32);
+        let (width, height) = self.array2d_chunk.dimensions();
+        let mut buffer = image::ImageBuffer::new(width as u32, height as u32);
 
-        // TODO: process image data
+        for (x, y, pixel) in buffer.enumerate_pixels_mut() {
+            let value = self.array2d_chunk.get(x as u64, y as u64);
+
+            *pixel = image::Rgb([value.0, value.1, value.2]);
+        }
 
         buffer.save("ray_tace1.png").unwrap();
     }
 
     /// Checks if the job (calculating the mandelbrot set) is already done.
     fn is_job_done(&self) -> bool {
-        // TODO: determine when the job is done
+        let (empty, processing, finished) = self.chunk_list.stats();
+        debug!("Job status: empty: {}, processing: {}, finished: {}", empty, processing, finished);
 
-        false
+        empty == 0 && processing == 0
     }
 }
 
@@ -44,21 +55,43 @@ impl NCServer for RayTracerServer {
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus<Self::NewDataT>, NCError> {
         debug!("Server::prepare_data_for_node, node_id: {}", node_id);
 
-        // TODO: prepare data for node
+        if let Some((i, free_chunk)) = self.chunk_list.get_next_free_chunk() {
+            let data = &free_chunk.data;
+            let data_for_node = ServerData {
+                chunk_id: i as u64,
+                x: data.x,
+                y: data.y,
+                width: data.width,
+                height: data.height,
+            };
 
-        if self.is_job_done() {
-            Ok(NCJobStatus::Finished)
+            free_chunk.set_processing(node_id);
+            debug!("preparing chunk {} for node {}", i, node_id);
+            Ok(NCJobStatus::Unfinished(data_for_node))
         } else {
-            Ok(NCJobStatus::Waiting)
+            if self.is_job_done() {
+                Ok(NCJobStatus::Finished)
+            } else {
+                Ok(NCJobStatus::Waiting)
+            }
         }
-
     }
 
     /// If one of the nodes has finished processing the small chunk the server writes the data back to the whole image Array2D.
     fn process_data_from_node(&mut self, node_id: NodeID, node_data: &Self::ProcessedDataT) -> Result<(), NCError> {
         debug!("Server::process_data_from_node, node_id: {}", node_id);
 
-        Ok(())
+        let chunk_id = node_data.chunk_id;
+        let source = &node_data.img;
+        let current_chunk = &mut self.chunk_list.get(chunk_id as usize);
+
+        if current_chunk.is_processing(node_id) {
+            current_chunk.set_finished();
+            self.array2d_chunk.set_chunk(chunk_id, &source)
+        } else {
+            error!("Mismatch data, should be Processing with node_id: {}, but is {:?}", node_id, current_chunk.node_id);
+            Err(NCError::NodeIDMismatch(node_id, current_chunk.node_id))
+        }
     }
 
     /// If some nodes have crashed or lost the network connection the internal chunks list is updated.
@@ -83,9 +116,21 @@ pub fn run_server(options: RayTracer1Opt) {
         ..Default::default()
     };
 
+    let width = 1024;
+    let height = 768;
+    let chunk_size = 64;
+
+    let array2d_chunk = Array2DChunk::new(width, height, chunk_size, chunk_size, (0, 0, 0));
+    let mut chunk_list = ChunkList::new();
+
+    for i in 0..array2d_chunk.num_of_chunks() {
+        let (x, y, width, height) = array2d_chunk.get_chunk_property(i);
+
+        chunk_list.push(ChunkData { x, y, width, height });
+    }
+
     let server = RayTracerServer {
-        width: 1024,
-        height: 768,
+        width, height, array2d_chunk, chunk_list,
     };
 
     let mut server_starter = NCServerStarter::new(configuration);
