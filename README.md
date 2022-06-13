@@ -118,7 +118,7 @@ struct MyServer {
     // ...
 }
 
-impl NCServer for MyStruct {
+impl NCServer for MyServer {
     // The method initial_data() doesn't have to be implemented if no initial data is needed.
 
     fn prepare_data_for_node(&mut self, node_id: NodeID) -> Result<NCJobStatus, NCError> {
