@@ -33,10 +33,10 @@ pub enum NCError {
     /// Decrypt error
     #[error("Decrypt error")]
     Decrypt,
-    /// The node expected a specific message from the server but got s.th. totally different.
+    /// The node expected a specific message from the server but got something totally different.
     #[error("Server message mismatch error")]
     ServerMsgMismatch,
-    /// The server expected a specific message from the node but got s.th. totally different.
+    /// The server expected a specific message from the node but got something totally different.
     #[error("Node message mismatch error")]
     NodeMsgMismatch,
     /// A different node id was expected. Expected first node id, found second node id.
@@ -48,7 +48,7 @@ pub enum NCError {
     /// An error using the utility data structure [`Array2D`](crate::Array2D).
     #[error("Array2D dimension mismatch error, expected: {0:?}, got: {1:?}")]
     Array2DDimensionMismatch((u64, u64), (u64, u64)),
-    /// Custom user defined error. This needs to be replaced in the future with [`Box<dyn Error>`] or s.th. similar.
+    /// Custom user defined error. This needs to be replaced in the future with [`Box<dyn Error>`] or something similar.
     #[error("Custom user defined error: {0}")]
     Custom(u32),
 }

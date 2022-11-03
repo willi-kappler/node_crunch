@@ -133,7 +133,7 @@ impl<U: Clone> NCNodeList<U> {
         }
     }
 
-    /// Return the number og nodes that have registered since the start of the server.
+    /// Return the number of nodes that have registered since the start of the server.
     /// Note that this also includes inactive nodes.
     pub(crate) fn len(&self) -> usize {
         self.nodes.len()

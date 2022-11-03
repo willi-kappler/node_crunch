@@ -30,7 +30,7 @@ pub(crate) enum NCServerMessage<InitialDataT, NewDataT, CustomMessageT> {
     /// When the node registers for the first time with the NCNodeMessage::Register message the server assigns a new node id
     /// and sends some optional initial data to the node.
     InitialData(NodeID, Option<InitialDataT>),
-    /// When the node requests new data to process wth the NCNodeMessage::NeedsData message, the current job status is sent to
+    /// When the node requests new data to process with the NCNodeMessage::NeedsData message, the current job status is sent to
     /// the node: unfinished, waiting or finished.
     JobStatus(NCJobStatus<NewDataT>),
     /// Send some statistics about the server to the node.
@@ -298,7 +298,7 @@ impl<T: NCServer> NCServerProcess<T, T::CustomMessageT> {
     }
 
     /// Shut down the server gracefully when the job is done or
-    /// when it is requested by the message NCNodeMessage::ShotDown
+    /// when it is requested by the message NCNodeMessage::ShutDown
     fn shut_down(&self) {
         self.job_done.store(true, Ordering::Relaxed);
     }

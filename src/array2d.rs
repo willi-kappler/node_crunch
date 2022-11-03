@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use crate::nc_node_info::NodeID;
 use crate::nc_error::NCError;
 
-/// Contains the 2D data, the width and the height od the 2D array.
+/// Contains the 2D data, the width and the height of the 2D array.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Array2D<T> {
     /// The width of the 2D array.

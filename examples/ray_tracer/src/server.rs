@@ -6,7 +6,7 @@ use node_crunch::{NCServer, NCJobStatus, NCConfiguration, NCError,
 
 use crate::{RayTracer1Opt, ServerData, NodeData};
 
-/// This contains teh final image and the list of chunks
+/// This contains the final image and the list of chunks
 #[derive(Debug, Clone)]
 struct RayTracerServer {
     /// Width of the final image
