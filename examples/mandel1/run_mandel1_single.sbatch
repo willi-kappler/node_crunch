@@ -14,7 +14,7 @@
 ## Number of nodes:
 #SBATCH -N 1
 
-# Ensure that all the binaries are availavle on all the cluster nodes at the same place.
+# Ensure that all the binaries are available on all the cluster nodes at the same place.
 # Usually this is done in the cluster setup via NFS or some other distributed
 # filesystem already.
 

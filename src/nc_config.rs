@@ -15,7 +15,7 @@ pub struct NCConfiguration{
     pub heartbeat: u64,
     /// Nodes will wait n seconds before contacting the server again to prevent a denial of service, default: 60.
     pub delay_request_data: u64,
-    /// Number of times a node should try to contact the server before givin up, default: 5.
+    /// Number of times a node should try to contact the server before giving up, default: 5.
     pub retry_counter: u64,
     /// The number of threads in the thread pool, default: 8.
     pub pool_size: u64,
