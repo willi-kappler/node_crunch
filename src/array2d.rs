@@ -6,7 +6,7 @@ use std::slice::{Chunks, ChunksMut};
 
 use serde::{Serialize, Deserialize};
 
-use crate::nc_node_info::NodeID;
+use crate::nc_node_info::NCNodeInfo;
 use crate::nc_error::NCError;
 
 /// Contains the 2D data, the width and the height of the 2D array.
@@ -175,7 +175,7 @@ pub struct Chunk<T> {
     /// The data itself.
     pub data: T,
     /// ID of the node that is currently processing the data.
-    pub node_id: NodeID,
+    pub node_info: NCNodeInfo,
     /// Has the data already been processed ? Is is not assigned yet ?
     status: ChunkStatus,
 }
@@ -192,15 +192,15 @@ impl<T> Chunk<T> {
     }
 
     /// Sets the chunk status to processing with the corresponding node id.
-    pub fn set_processing(&mut self, node_id: NodeID) {
+    pub fn set_processing(&mut self, node_info: NCNodeInfo) {
         self.status = ChunkStatus::Processing;
-        self.node_id = node_id;
+        self.node_info = node_info;
     }
 
     /// Checks if the chunk is currently being processed.
-    pub fn is_processing(&self, node_id: NodeID) -> bool {
+    pub fn is_processing(&self, node_info: &NCNodeInfo) -> bool {
         self.status == ChunkStatus::Processing &&
-        self.node_id == node_id
+        self.node_info == *node_info
     }
 
     /// Checks if the chunk is finished.
@@ -255,10 +255,10 @@ impl<T> ChunkList<T> {
 
     /// Some nodes may have crashed or lost the network connection.
     /// Sets all the chunks that these nodes have been processing to the empty state.
-    pub fn heartbeat_timeout(&mut self, nodes: &[NodeID]) {
+    pub fn heartbeat_timeout(&mut self, nodes: &[NCNodeInfo]) {
         for chunk in self.chunks.iter_mut() {
             for node_id in nodes.iter() {
-                if chunk.is_processing(*node_id) {
+                if chunk.is_processing(node_id) {
                     chunk.set_empty()
                 }
             }
@@ -267,7 +267,7 @@ impl<T> ChunkList<T> {
 
     /// Adds a new chunk with the given data to the list of chunks.
     pub fn push(&mut self, data: T) {
-        self.chunks.push(Chunk{ data, node_id: NodeID::random(), status: ChunkStatus::Empty});
+        self.chunks.push(Chunk{ data, node_info: NCNodeInfo::empty(), status: ChunkStatus::Empty});
     }
 }
 
