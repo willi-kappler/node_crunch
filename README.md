@@ -1,5 +1,8 @@
 # Node Crunch
 
+This crate is no longer in development.
+The successor is available [here](https://github.com/willi-kappler/num_crunch)
+
 [![MIT licensed](https://img.shields.io/github/license/willi-kappler/node_crunch)](./LICENSE)
 [![Docs](https://docs.rs/node_crunch/badge.svg)](https://docs.rs/node_crunch)
 [![Crates.io version](https://img.shields.io/crates/v/node_crunch.svg)](https://crates.io/crates/node_crunch)
